@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Loop RPG</title>
+    <title>Loop RPG - DQ1風試作</title>
     <style>
       body {
         margin: 0;
@@ -12,10 +12,47 @@
         align-items: center;
         min-height: 100vh;
         background-color: #000;
+        font-family: monospace;
       }
+      #wrap { position: relative; }
+      #trait-modal {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.75);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+      #trait-modal.hidden { display: none; }
+      #trait-lv { color: #ff0; font-size: 20px; margin-bottom: 16px; }
+      #trait-choices { display: flex; gap: 12px; }
+      .trait-card {
+        width: 150px;
+        padding: 16px 8px;
+        font-size: 15px;
+        font-family: monospace;
+        background: #fff;
+        border: 4px solid #00a;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .trait-card:hover { background: #ffeba0; }
+      #help { color: #888; font-size: 12px; text-align: center; margin-top: 8px; }
     </style>
   </head>
   <body>
+    <div id="wrap">
+      <div id="game"></div>
+      <div id="trait-modal" class="hidden">
+        <div id="trait-lv"></div>
+        <div id="trait-choices"></div>
+      </div>
+      <div id="help">移動:WASD/矢印 / 戦闘:上下で選択・Z/Enterで決定 / C:城で王命 V:村で回復 D:洞窟</div>
+    </div>
     <script src="/bundle.js"></script>
   </body>
-</html> 
+</html>
