@@ -7,6 +7,7 @@ export const gameState = {
   py: 1,
   hasOrder: false,
   cleared: false,
+  chestOpened: false,
   encounterGraceUntil: 0,
   initialized: false,
 };
@@ -17,6 +18,7 @@ export function resetState(sx, sy) {
   gameState.py = sy;
   gameState.hasOrder = false;
   gameState.cleared = false;
+  gameState.chestOpened = false;
   gameState.encounterGraceUntil = 0;
   gameState.initialized = true;
 }

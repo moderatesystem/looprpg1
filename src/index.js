@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import FieldScene from './scenes/FieldScene';
 import BattleScene from './scenes/BattleScene';
+import DungeonScene from './scenes/DungeonScene';
 
 window.game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -10,5 +11,5 @@ window.game = new Phaser.Game({
   backgroundColor: '#000',
   roundPixels: true,
   physics: { default: 'arcade' },
-  scene: [FieldScene, BattleScene],
+  scene: [FieldScene, BattleScene, DungeonScene],
 });

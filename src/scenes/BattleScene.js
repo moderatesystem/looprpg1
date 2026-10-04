@@ -14,7 +14,8 @@ export default class BattleScene extends Phaser.Scene {
   create(data) {
     this.cmdIndex = 0;
     this.over = false;
-    this.enemy = makeEnemy(gameState.player.lv, data.tile || '.');
+    this.returnTo = data.from || 'field';
+    this.enemy = makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.');
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
     this.drawScreen();
@@ -138,7 +139,7 @@ export default class BattleScene extends Phaser.Scene {
     } else if (cmd === 'にげる') {
       if (Math.random() < 0.55) {
         this.setMessage('うまくにげきれた！');
-        this.backToField();
+        this.backToOrigin();
       } else {
         this.setMessage('にげきれなかった！');
         this.enemyTurn();
@@ -182,16 +183,16 @@ export default class BattleScene extends Phaser.Scene {
       ups += 1;
     }
     if (ups > 0) this.openTraitModal(ups);
-    else this.backToField();
+    else this.backToOrigin();
   }
 
-  backToField() {
+  backToOrigin() {
     this.over = true;
     gameState.encounterGraceUntil = Date.now() + 1500;
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start('field');
+      this.scene.start(this.returnTo);
     });
   }
 
@@ -215,7 +216,7 @@ export default class BattleScene extends Phaser.Scene {
         if (left - 1 > 0) this.openTraitModal(left - 1);
         else {
           modal.classList.add('hidden');
-          this.backToField();
+          this.backToOrigin();
         }
       };
       box.appendChild(b);
