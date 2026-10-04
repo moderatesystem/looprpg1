@@ -32,3 +32,8 @@
 - `S`: 入口（フィールドに戻る）
 - `H`: 宝箱（1回限り：50G＋やくそう2＋固定特性「かたい皮」）
 - NPC配置ルール：通行可能タイル（.）の上に置き、NPC自体は障害物扱い
+
+## 敵画像パイプライン（2026-10-04）
+- `public/assets/enemies/<id>.png`（id: slime, bat, goblin, ghost, golem, demon）に透過PNGを置くと戦闘画面で自動使用
+- ファイルがなければ手描きシェイプにフォールバック（素材なしでも動作）
+- 生成候補：fal.ai `image2pixel`（transparent_background指定でドット絵＋透過化）

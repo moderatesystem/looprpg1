@@ -136,7 +136,13 @@ export default class DungeonScene extends Phaser.Scene {
       return;
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
-    if (Math.random() < 0.12) this.enterBattle();
+    // 宝箱取得後はボスが徘徊する（1回限り）
+    if (gameState.chestOpened && !gameState.bossDefeated && Math.random() < 0.3) {
+      this.enterBattle(true);
+      return;
+    }
+    const rate = Math.max(0.02, 0.12 * (1 - 0.1 * gameState.player.quick));
+    if (Math.random() < rate) this.enterBattle(false);
   }
 
   openChest() {
@@ -152,13 +158,13 @@ export default class DungeonScene extends Phaser.Scene {
     this.drawTiles();
   }
 
-  enterBattle() {
+  enterBattle(isBoss) {
     this.cmdLock = true;
     beep(200, 150);
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start('battle', { tile: '.', from: 'dungeon', lvBonus: 2 });
+      this.scene.start('battle', { tile: '.', from: 'dungeon', lvBonus: 2, boss: isBoss });
     });
   }
 

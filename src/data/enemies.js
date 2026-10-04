@@ -7,6 +7,8 @@ const TABLE = [
   { id: 'golem', name: 'ゴーレム', hp: 30, atk: 12, exp: 22, gold: 18, color: 0x8d6e63 },
 ];
 
+export const ENEMY_IDS = TABLE.map((e) => e.id);
+
 export function makeEnemy(playerLv, tile) {
   // 森は強めが出やすい
   const weights = TABLE.map((_, i) => {
@@ -31,5 +33,24 @@ export function makeEnemy(playerLv, tile) {
     atk: base.atk + lvBonus,
     exp: base.exp + lvBonus * 2,
     gold: base.gold + lvBonus * 2,
+    poisonTurns: 0,
+  };
+}
+
+export const BOSS = {
+  id: 'demon', name: 'まおうのてさき', hp: 70, atk: 16, exp: 60, gold: 100,
+  color: 0xb71c1c, boss: true,
+};
+
+export function makeBoss(playerLv) {
+  const b = Math.floor(playerLv / 2);
+  return {
+    ...BOSS,
+    maxHp: BOSS.hp + b * 4,
+    hp: BOSS.hp + b * 4,
+    atk: BOSS.atk + b,
+    exp: BOSS.exp + b * 4,
+    gold: BOSS.gold + b * 5,
+    poisonTurns: 0,
   };
 }

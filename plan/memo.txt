@@ -8,3 +8,4 @@
 - 2026-10-04 依存を最新化：Phaser 3.70→4.2.1、webpack 5.90→5.111、webpack-cli 5→7、webpack-dev-server 5→6。標準APIのみ使用のため移行ガイド上の破壊的変更に非該当と判断
 - 2026-10-04 Phase2着手：戦闘は別画面（BattleScene）に分離、30x30マップ＋BFS到達検証OK、敵5種
 - 2026-10-04 Phase2継続：会話データ駆動化（dialogues.json：村4・NPC7・王・洞窟）、宿屋2軒（10G全回復）、試練の洞窟15x15＋宝箱（固定特性かたい皮）
+- 2026-10-04 Phase3：特性20種完成・ボス（まおうのてさき）・Lv上限10。敵画像は差し替え口（public/assets/enemies/<id>.png、透過PNG）を用意、手描きシェイプにフォールバック。fal.aiのimage2pixel（transparent_background）がpipeline候補

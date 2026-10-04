@@ -264,7 +264,8 @@ export default class FieldScene extends Phaser.Scene {
       return;
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
-    const rate = ch === 'T' ? 0.16 : 0.08;
+    let rate = ch === 'T' ? 0.16 : 0.08;
+    rate = Math.max(0.02, rate * (1 - 0.1 * gameState.player.quick));
     if (Math.random() < rate) this.enterBattle(ch);
   }
 

@@ -8,6 +8,7 @@ export const gameState = {
   hasOrder: false,
   cleared: false,
   chestOpened: false,
+  bossDefeated: false,
   encounterGraceUntil: 0,
   initialized: false,
 };
@@ -19,6 +20,7 @@ export function resetState(sx, sy) {
   gameState.hasOrder = false;
   gameState.cleared = false;
   gameState.chestOpened = false;
+  gameState.bossDefeated = false;
   gameState.encounterGraceUntil = 0;
   gameState.initialized = true;
 }
