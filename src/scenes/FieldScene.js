@@ -130,17 +130,12 @@ export default class FieldScene extends Phaser.Scene {
   setMessage(t) { this.msgText.setText(t); }
 
   handleKey(e) {
+    // 移動はupdateループ側に一本化（keydown併用だと1押下で2マス進むため）
+    if (e.repeat) return;
     const k = e.key;
     if (this.talk) { this.advanceTalk(k); return; }
     if (this.cmdLock) return;
     if (k === 'e' || k === 'E' || k === ' ') { this.tryTalk(); return; }
-    let dx = 0, dy = 0;
-    if (k === 'ArrowUp' || k === 'w' || k === 'W') dy = -1;
-    else if (k === 'ArrowDown' || k === 's' || k === 'S') dy = 1;
-    else if (k === 'ArrowLeft' || k === 'a' || k === 'A') dx = -1;
-    else if (k === 'ArrowRight' || k === 'd' || k === 'D') dx = 1;
-    else return;
-    this.tryMove(dx, dy);
   }
 
   // ---- 会話 ----
