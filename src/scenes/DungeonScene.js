@@ -8,10 +8,8 @@ import { preloadCharArt, drawHeroFigure } from '../game/charArt';
 import { beep, TILE } from './FieldScene';
 
 const MAP = DIALOGUES.dungeon.map;
-const OX = 160;
-const OY = 5;
 
-// 試練の洞窟（単層）。凡例 #:壁 .:床 S:入口（戻る） H:宝箱
+// 試練の洞窟（単層）。凡例 #:壁 .:床 S:入口（戻る） H:宝箱 B:ボス床
 export default class DungeonScene extends Phaser.Scene {
   constructor() {
     super('dungeon');
@@ -30,7 +28,10 @@ export default class DungeonScene extends Phaser.Scene {
 
     this.drawMap();
     this.drawHud();
-    this.cameras.main.fadeIn(250, 0, 0, 0);
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
+    cam.startFollow(this.follower, false, 0.15, 0.15);
+    cam.fadeIn(250, 0, 0, 0);
     this.setMessage(`「${DIALOGUES.dungeon.name}」にもぐった。宝箱(H)と赤い床(B)に注意。入口(S)で戻れる`);
     startBgm('dungeon');
     this.events.once('shutdown', stopBgm);
@@ -54,9 +55,13 @@ export default class DungeonScene extends Phaser.Scene {
   tileAt(x, y) { return MAP[y][x]; }
 
   drawMap() {
+    if (this.follower) this.follower.destroy();
     const g = this.add.graphics();
     this.mapGfx = g;
     this.drawTiles();
+    this.follower = this.add.rectangle(
+      this.dx * TILE + TILE / 2, this.dy * TILE + TILE / 2, 4, 4, 0xffffff, 0
+    );
     const pg = this.add.graphics();
     this.playerGfx = pg;
     this.drawPlayer();
@@ -68,7 +73,7 @@ export default class DungeonScene extends Phaser.Scene {
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
         const ch = MAP[y][x];
-        const px = OX + x * TILE, py = OY + y * TILE;
+        const px = x * TILE, py = y * TILE;
         if (ch === '#') g.fillStyle(0x3a3a4a, 1);
         else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
         else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
@@ -77,11 +82,11 @@ export default class DungeonScene extends Phaser.Scene {
         g.fillRect(px, py, TILE - 1, TILE - 1);
         if (ch === 'B' && !gameState.bossDefeated) {
           g.fillStyle(0xffffff, 1);
-          g.fillTriangle(px + 6, py + 10, px + 12, py + 22, px + 6, py + 22);
-          g.fillTriangle(px + 26, py + 10, px + 20, py + 22, px + 26, py + 22);
+          g.fillTriangle(px + 12, py + 20, px + 24, py + 44, px + 12, py + 44);
+          g.fillTriangle(px + 52, py + 20, px + 40, py + 44, px + 52, py + 44);
         }
         if (ch === 'H' && !gameState.chestOpened) {
-          g.fillStyle(0x000000, 1); g.fillRect(px + 10, py + 12, 12, 8);
+          g.fillStyle(0x000000, 1); g.fillRect(px + 20, py + 24, 24, 16);
         }
       }
     }
@@ -89,25 +94,25 @@ export default class DungeonScene extends Phaser.Scene {
 
   drawPlayer() {
     const pg = this.playerGfx;
-    const px = OX + this.dx * TILE, py = OY + this.dy * TILE;
+    const px = this.dx * TILE, py = this.dy * TILE;
     if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
     pg.clear();
     pg.fillStyle(0xffffff, 1);
-    pg.fillRect(px + 8, py + 8, 16, 16);
-    pg.lineStyle(2, 0x000000, 1);
-    pg.strokeRect(px + 8, py + 8, 16, 16);
+    pg.fillRect(px + 16, py + 16, 32, 32);
+    pg.lineStyle(3, 0x000000, 1);
+    pg.strokeRect(px + 16, py + 16, 32, 32);
     pg.fillStyle(0x000000, 1);
-    pg.fillRect(px + 12, py + 11, 3, 5);
-    pg.fillRect(px + 18, py + 11, 3, 5);
+    pg.fillRect(px + 24, py + 22, 6, 10);
+    pg.fillRect(px + 36, py + 22, 6, 10);
   }
 
   drawHud() {
-    const g = this.add.graphics();
+    const g = this.add.graphics().setScrollFactor(0);
     g.fillStyle(0x000000, 0.85); g.fillRect(0, 0, 800, 30);
-    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' });
+    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setScrollFactor(0);
     g.fillStyle(0x000000, 1); g.fillRect(0, 490, 800, 110);
     g.lineStyle(2, 0xffffff, 1); g.strokeRect(0, 490, 800, 110);
-    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 770 } });
+    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 770 } }).setScrollFactor(0);
   }
 
   refreshStatus() {
@@ -136,6 +141,7 @@ export default class DungeonScene extends Phaser.Scene {
     if (!this.passable(ch)) { beep(120, 60); return; }
     this.dx = nx; this.dy = ny;
     this.moved = true;
+    this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
     this.drawPlayer();
     beep(660, 30);
     this.onEnterTile(ch);

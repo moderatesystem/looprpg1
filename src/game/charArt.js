@@ -21,7 +21,7 @@ export function drawHeroFigure(scene, gfx, px, py, imgHolder) {
   if (imgHolder.img) { imgHolder.img.destroy(); imgHolder.img = null; }
   if (scene.textures.exists('hero')) {
     imgHolder.img = scene.add.image(px + 16, py + 16, 'hero');
-    imgHolder.img.setDisplaySize(22, 22);
+    imgHolder.img.setDisplaySize(44, 44);
     gfx.clear();
     return true;
   }
@@ -32,7 +32,7 @@ export function drawNpcFigure(scene, n, px, py) {
   const key = npcKey(n.id);
   if (scene.textures.exists(key)) {
     const img = scene.add.image(px + 16, py + 16, key);
-    img.setDisplaySize(20, 20);
+    img.setDisplaySize(40, 40);
     return img;
   }
   return null;
