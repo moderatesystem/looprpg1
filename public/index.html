@@ -41,6 +41,27 @@
         gap: 8px;
       }
       .trait-card:hover { background: #ffeba0; }
+      #status-modal {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9;
+      }
+      #status-modal.hidden { display: none; }
+      #status-body {
+        background: #000;
+        border: 4px solid #fff;
+        color: #fff;
+        padding: 20px 28px;
+        font-size: 15px;
+        line-height: 1.7;
+        max-width: 560px;
+      }
+      #status-body .st-head { color: #ff0; margin-top: 8px; }
+      #status-body .st-hint { color: #888; font-size: 12px; margin-top: 8px; }
       #help { color: #888; font-size: 12px; text-align: center; margin-top: 8px; }
     </style>
   </head>
@@ -51,7 +72,10 @@
         <div id="trait-lv"></div>
         <div id="trait-choices"></div>
       </div>
-      <div id="help">移動:WASD/矢印 / EかSpace:はなす・送り / 戦闘:上下で選択・Zで決定 / C:城 D:洞窟</div>
+      <div id="status-modal" class="hidden">
+        <div id="status-body"></div>
+      </div>
+      <div id="help">移動:WASD/矢印 / EかSpace:はなす・送り / T:ステータス / 戦闘:Zで決定・送り</div>
     </div>
     <script src="/bundle.js"></script>
   </body>

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import DIALOGUES from '../data/dialogues.json';
 import { gameState } from '../game/state';
 import { applyTrait } from '../data/traits';
+import { toggleStatus, isStatusOpen } from '../game/statusUi';
+import { startBgm, stopBgm, jingle } from '../game/sound';
 import { beep, TILE } from './FieldScene';
 
 const MAP = DIALOGUES.dungeon.map;
@@ -24,7 +26,9 @@ export default class DungeonScene extends Phaser.Scene {
     this.drawMap();
     this.drawHud();
     this.cameras.main.fadeIn(250, 0, 0, 0);
-    this.setMessage(`「${DIALOGUES.dungeon.name}」にもぐった。奥の宝箱(H)を探せ。入口(S)で戻れる`);
+    this.setMessage(`「${DIALOGUES.dungeon.name}」にもぐった。宝箱(H)と赤い床(B)に注意。入口(S)で戻れる`);
+    startBgm('dungeon');
+    this.events.once('shutdown', stopBgm);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyW = this.input.keyboard.addKey('W');
@@ -62,9 +66,15 @@ export default class DungeonScene extends Phaser.Scene {
         const px = OX + x * TILE, py = OY + y * TILE;
         if (ch === '#') g.fillStyle(0x3a3a4a, 1);
         else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
+        else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
         else if (ch === 'H') g.fillStyle(gameState.chestOpened ? 0x5a2a2a : 0xd8a03a, 1);
         else g.fillStyle(0x5a4a3a, 1);
         g.fillRect(px, py, TILE - 1, TILE - 1);
+        if (ch === 'B' && !gameState.bossDefeated) {
+          g.fillStyle(0xffffff, 1);
+          g.fillTriangle(px + 6, py + 10, px + 12, py + 22, px + 6, py + 22);
+          g.fillTriangle(px + 26, py + 10, px + 20, py + 22, px + 26, py + 22);
+        }
         if (ch === 'H' && !gameState.chestOpened) {
           g.fillStyle(0x000000, 1); g.fillRect(px + 10, py + 12, 12, 8);
         }
@@ -75,10 +85,14 @@ export default class DungeonScene extends Phaser.Scene {
   drawPlayer() {
     const pg = this.playerGfx;
     pg.clear();
+    const px = OX + this.dx * TILE, py = OY + this.dy * TILE;
     pg.fillStyle(0xffffff, 1);
-    pg.fillRect(OX + this.dx * TILE + 8, OY + this.dy * TILE + 8, 16, 16);
+    pg.fillRect(px + 8, py + 8, 16, 16);
     pg.lineStyle(2, 0x000000, 1);
-    pg.strokeRect(OX + this.dx * TILE + 8, OY + this.dy * TILE + 8, 16, 16);
+    pg.strokeRect(px + 8, py + 8, 16, 16);
+    pg.fillStyle(0x000000, 1);
+    pg.fillRect(px + 12, py + 11, 3, 5);
+    pg.fillRect(px + 18, py + 11, 3, 5);
   }
 
   drawHud() {
@@ -98,11 +112,16 @@ export default class DungeonScene extends Phaser.Scene {
   setMessage(t) { this.msgText.setText(t); }
 
   handleKey(e) {
-    // 移動はupdateループ側に一本化（keydown併用だと1押下で2マス進むため）
-    if (this.cmdLock || e.repeat) return;
+    if (e.repeat) return;
+    const k = e.key;
+    if (k === 't' || k === 'T') {
+      if (!this.cmdLock) toggleStatus();
+      return;
+    }
+    if (this.cmdLock) return;
   }
 
-  passable(ch) { return ['.', 'S', 'H'].includes(ch); }
+  passable(ch) { return ['.', 'S', 'H', 'B'].includes(ch); }
 
   tryMove(dx, dy) {
     const nx = this.dx + dx, ny = this.dy + dy;
@@ -128,12 +147,15 @@ export default class DungeonScene extends Phaser.Scene {
       else this.setMessage('空っぽの宝箱だ。');
       return;
     }
-    if (Date.now() < gameState.encounterGraceUntil) return;
-    // 宝箱取得後はボスが徘徊する（1回限り）
-    if (gameState.chestOpened && !gameState.bossDefeated && Math.random() < 0.3) {
-      this.enterBattle(true);
+    if (ch === 'B') {
+      if (!gameState.bossDefeated) {
+        this.enterBattle(true);
+        return;
+      }
+      this.setMessage('番人を倒した証が残っている。');
       return;
     }
+    if (Date.now() < gameState.encounterGraceUntil) return;
     const rate = Math.max(0.02, 0.12 * (1 - 0.1 * gameState.player.quick));
     if (Math.random() < rate) this.enterBattle(false);
   }
@@ -145,14 +167,14 @@ export default class DungeonScene extends Phaser.Scene {
     p.gold += c.gold;
     p.herbs += c.herbs;
     const got = applyTrait(p, c.trait);
-    gameState.cleared = true;
-    beep(880, 200);
-    this.setMessage(`${c.message} ${DIALOGUES.dungeon.clearMessage}`);
+    jingle('chest');
+    this.setMessage(`${c.message} ${DIALOGUES.dungeon.bossWarning}`);
     this.drawTiles();
   }
 
   enterBattle(isBoss) {
     this.cmdLock = true;
+    stopBgm();
     beep(200, 150);
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
@@ -163,6 +185,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   exitDungeon() {
     this.cmdLock = true;
+    stopBgm();
     const cam = this.cameras.main;
     cam.fadeOut(250, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
@@ -171,7 +194,7 @@ export default class DungeonScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.cmdLock) return;
+    if (this.cmdLock || isStatusOpen()) return;
     this.moveCd -= delta;
     if (this.moveCd > 0) return;
     const keys = this.cursors;

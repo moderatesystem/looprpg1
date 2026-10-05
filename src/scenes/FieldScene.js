@@ -2,29 +2,30 @@ import Phaser from 'phaser';
 import { FIELD_MAP, findTile } from '../data/fieldMap';
 import DIALOGUES from '../data/dialogues.json';
 import { gameState, resetState } from '../game/state';
+import { toggleStatus, isStatusOpen } from '../game/statusUi';
+import { startBgm, stopBgm, jingle } from '../game/sound';
 
 export const TILE = 32;
+export { beep } from '../game/sound';
 
 const COLORS = {
   '#': 0x6b6259, '.': 0x4a8f3c, T: 0x2f6b2a, '~': 0x3a6fd8,
   C: 0xd8c23a, V: 0xb0722e, D: 0x5b2a86, S: 0x4a8f3c,
 };
-const NPC_COLOR = 0xff9800;
 
-// 簡易ピッ音（素材前仮置き）
-let actx = null;
-export function beep(freq = 440, ms = 70) {
-  try {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = actx.createOscillator();
-    const g = actx.createGain();
-    o.type = 'square';
-    o.frequency.value = freq;
-    g.gain.value = 0.04;
-    o.connect(g); g.connect(actx.destination);
-    o.start();
-    setTimeout(() => o.stop(), ms);
-  } catch (e) { /* 音なしでも続行 */ }
+function npcColor(n) {
+  if (n.inn) return 0xffd54f;
+  if (n.shop) return 0x4fc3f7;
+  if (n.church) return 0xffffff;
+  if (n.id === 'guard') return 0x7e9bff;
+  return 0xff9800;
+}
+
+function shade(color, amt) {
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 255) + amt));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (color & 255) + amt));
+  return (r << 16) | (g << 8) | b;
 }
 
 export function villageAt(x, y) {
@@ -33,6 +34,13 @@ export function villageAt(x, y) {
 
 export function npcAt(x, y) {
   return DIALOGUES.npcs.find((n) => n.x === x && n.y === y) || null;
+}
+
+function kingStage() {
+  if (!gameState.hasOrder) return 'first';
+  if (gameState.bossDefeated) return 'clear';
+  if (gameState.chestOpened) return 'chest';
+  return 'ordered';
 }
 
 export default class FieldScene extends Phaser.Scene {
@@ -49,7 +57,7 @@ export default class FieldScene extends Phaser.Scene {
 
     this.moveCd = 0;
     this.cmdLock = false;
-    this.talk = null; // {npc|null king, lines, idx, choice}
+    this.talk = null;
 
     this.drawField();
     this.drawHud();
@@ -59,7 +67,15 @@ export default class FieldScene extends Phaser.Scene {
     cam.startFollow(this.follower, false, 0.15, 0.15);
     cam.fadeIn(200, 0, 0, 0);
 
-    this.setMessage('Eキー/Spaceで話す。王様(C)に会い、洞窟(D)を目指せ');
+    if (st.pendingMsg) {
+      this.setMessage(st.pendingMsg);
+      st.pendingMsg = null;
+    } else {
+      this.setMessage('黄色＝城 紫＝洞窟 茶＝村。Eキーで話す、Tキーでステータス。王様(C)に会いに行こう');
+    }
+
+    startBgm('field');
+    this.events.once('shutdown', stopBgm);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyW = this.input.keyboard.addKey('W');
@@ -79,19 +95,28 @@ export default class FieldScene extends Phaser.Scene {
     for (let y = 0; y < FIELD_MAP.length; y++) {
       for (let x = 0; x < FIELD_MAP[y].length; x++) {
         const ch = FIELD_MAP[y][x];
-        g.fillStyle(COLORS[ch] ?? 0x000000, 1);
+        const v = ((x * 7 + y * 13) % 3) * 10 - 10;
+        g.fillStyle(shade(COLORS[ch] ?? 0x000000, v), 1);
         g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
-        if (ch === 'C') { g.fillStyle(0xffffff, 1); g.fillRect(x * TILE + 12, y * TILE + 6, 8, 12); }
-        if (ch === 'D') { g.fillStyle(0x000000, 1); g.fillRect(x * TILE + 8, y * TILE + 12, 16, 12); }
-        if (ch === 'V') { g.fillStyle(0x7a3b00, 1); g.fillRect(x * TILE + 10, y * TILE + 10, 12, 10); }
+        const ax = x * TILE, ay = y * TILE;
+        const off = (x * 5 + y * 11) % 3;
+        if (ch === '.') { g.fillStyle(shade(COLORS['.'], -25), 1); g.fillRect(ax + 6 + off * 6, ay + 18, 5, 5); }
+        if (ch === 'T') { g.fillStyle(0x1d4d1a, 1); g.fillRect(ax + 7 + off * 4, ay + 8, 10, 12); }
+        if (ch === '~') { g.fillStyle(0x9fc8ff, 1); g.fillRect(ax + 5, ay + 14 + (off % 2) * 6, 20, 2); }
+        if (ch === 'C') { g.fillStyle(0xffffff, 1); g.fillRect(ax + 12, ay + 6, 8, 12); }
+        if (ch === 'D') { g.fillStyle(0x000000, 1); g.fillRect(ax + 8, ay + 12, 16, 12); }
+        if (ch === 'V') { g.fillStyle(0x7a3b00, 1); g.fillRect(ax + 10, ay + 10, 12, 10); }
       }
     }
-    // NPC
     for (const n of DIALOGUES.npcs) {
-      g.fillStyle(NPC_COLOR, 1);
+      const c = npcColor(n);
+      g.fillStyle(c, 1);
       g.fillRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
       g.lineStyle(2, 0x000000, 1);
       g.strokeRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
+      this.add.text(n.x * TILE - 2, n.y * TILE - 15, n.name, {
+        fontSize: '10px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
+      });
     }
     this.follower = this.add.rectangle(
       gameState.px * TILE + TILE / 2, gameState.py * TILE + TILE / 2, 4, 4, 0xffffff, 0
@@ -104,10 +129,14 @@ export default class FieldScene extends Phaser.Scene {
   drawPlayer() {
     const pg = this.playerGfx;
     pg.clear();
+    const px = gameState.px * TILE, py = gameState.py * TILE;
     pg.fillStyle(0xffffff, 1);
-    pg.fillRect(gameState.px * TILE + 8, gameState.py * TILE + 8, 16, 16);
+    pg.fillRect(px + 8, py + 8, 16, 16);
     pg.lineStyle(2, 0x000000, 1);
-    pg.strokeRect(gameState.px * TILE + 8, gameState.py * TILE + 8, 16, 16);
+    pg.strokeRect(px + 8, py + 8, 16, 16);
+    pg.fillStyle(0x000000, 1);
+    pg.fillRect(px + 12, py + 11, 3, 5);
+    pg.fillRect(px + 18, py + 11, 3, 5);
   }
 
   drawHud() {
@@ -133,12 +162,16 @@ export default class FieldScene extends Phaser.Scene {
     // 移動はupdateループ側に一本化（keydown併用だと1押下で2マス進むため）
     if (e.repeat) return;
     const k = e.key;
+    if (k === 't' || k === 'T') {
+      if (!this.talk && !this.cmdLock) toggleStatus();
+      return;
+    }
+    if (isStatusOpen()) return;
     if (this.talk) { this.advanceTalk(k); return; }
     if (this.cmdLock) return;
     if (k === 'e' || k === 'E' || k === ' ') { this.tryTalk(); return; }
   }
 
-  // ---- 会話 ----
   adjacentNpc() {
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
     for (const [dx, dy] of dirs) {
@@ -149,10 +182,9 @@ export default class FieldScene extends Phaser.Scene {
   }
 
   tryTalk() {
-    // 城の床の上なら王に謁見
     if (FIELD_MAP[gameState.py][gameState.px] === 'C') {
-      const lines = gameState.hasOrder ? DIALOGUES.king.after : DIALOGUES.king.first;
-      this.talk = { name: '王さま', lines, idx: 0, choice: null, king: !gameState.hasOrder };
+      const stage = kingStage();
+      this.talk = { name: '王さま', lines: DIALOGUES.king[stage], idx: 0, choice: null, kingStage: stage };
       this.cmdLock = true;
       this.showTalk();
       return;
@@ -167,7 +199,6 @@ export default class FieldScene extends Phaser.Scene {
   showTalk() {
     const t = this.talk;
     this.setMessage(`${t.name}「${t.lines[t.idx]}」`);
-    beep(520, 40);
   }
 
   advanceTalk(k) {
@@ -182,12 +213,28 @@ export default class FieldScene extends Phaser.Scene {
       if (k === 'x' || k === 'X') return this.chooseInn(false);
       return;
     }
+    if (t.choice === 'shop') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseShop(true);
+      if (k === 'x' || k === 'X') return this.chooseShop(false);
+      return;
+    }
     if (!okKeys.includes(k)) return;
     t.idx += 1;
     if (t.idx < t.lines.length) { this.showTalk(); return; }
     if (t.npc && t.npc.inn) {
       t.choice = 'inn';
-      this.setMessage(`${t.name}「一晩 ${t.npc.cost}ゴールドだ。泊まるか？（Z=はい X=いいえ）」`);
+      this.setMessage(`${t.name}「一晩 ${t.npc.cost}Gだ。泊まるか？（Z=はい X=いいえ）」`);
+      return;
+    }
+    if (t.npc && t.npc.shop) {
+      const s = t.npc.shop;
+      if (gameState.weaponBought) {
+        this.setMessage(`${t.name}「${s.name}は売り切れだ。また来てくれ。」`);
+        t.done = true;
+        return;
+      }
+      t.choice = 'shop';
+      this.setMessage(`${t.name}「${s.name} ${s.cost}G（ATK+${s.atk}）だ。買うか？（Z=買う X=やめる）」`);
       return;
     }
     this.endTalk(t);
@@ -202,7 +249,7 @@ export default class FieldScene extends Phaser.Scene {
       } else {
         p.gold -= t.npc.cost;
         p.hp = p.maxHp;
-        beep(700, 150);
+        jingle('inn');
         this.setMessage('朝になった！ HPが全回復した！ ── 今日もいい天気だ。');
       }
     } else {
@@ -213,29 +260,58 @@ export default class FieldScene extends Phaser.Scene {
     this.refreshStatus();
   }
 
+  chooseShop(yes) {
+    const t = this.talk;
+    const p = gameState.player;
+    const s = t.npc.shop;
+    if (yes) {
+      if (gameState.weaponBought) {
+        this.setMessage(`${t.name}「売り切れだよ。」`);
+      } else if (p.gold < s.cost) {
+        this.setMessage(`${t.name}「お金が足りないな。${s.cost}Gだ。」`);
+      } else {
+        p.gold -= s.cost;
+        p.atk += s.atk;
+        gameState.weaponBought = true;
+        jingle('shop');
+        this.setMessage(`「${s.name}」を買った！ ATK+${s.atk}！`);
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。また来てくれ。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
   endTalk(t) {
-    if (t.king && !gameState.hasOrder) {
+    if (t.kingStage === 'first' && !gameState.hasOrder) {
       gameState.hasOrder = true;
-      beep(880, 120);
+      jingle('levelup');
     }
     this.talk = null;
     this.cmdLock = false;
     this.refreshStatus();
   }
 
-  // ---- 移動 ----
   passable(ch) { return ['.', 'T', 'C', 'V', 'D', 'S'].includes(ch); }
+
+  regionDanger() {
+    const d = Math.abs(gameState.px - 1) + Math.abs(gameState.py - 6);
+    if (d < 8) return 0.4;
+    if (d < 16) return 0.8;
+    return 1.2;
+  }
 
   tryMove(dx, dy) {
     const nx = gameState.px + dx, ny = gameState.py + dy;
     if (ny < 0 || nx < 0 || ny >= FIELD_MAP.length || nx >= FIELD_MAP[0].length) return;
-    if (npcAt(nx, ny)) { beep(120, 60); return; } // NPCは障害物
+    if (npcAt(nx, ny)) return;
     const ch = FIELD_MAP[ny][nx];
-    if (!this.passable(ch)) { beep(120, 60); return; }
+    if (!this.passable(ch)) return;
     gameState.px = nx; gameState.py = ny;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
     this.drawPlayer();
-    beep(660, 30);
     this.onEnterTile(ch);
     this.refreshStatus();
   }
@@ -266,17 +342,17 @@ export default class FieldScene extends Phaser.Scene {
 
   enterBattle(tile) {
     this.cmdLock = true;
-    beep(200, 150);
+    stopBgm();
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start('battle', { tile, from: 'field' });
+      this.scene.start('battle', { tile, from: 'field', danger: this.regionDanger() });
     });
   }
 
   enterDungeon() {
     this.cmdLock = true;
-    beep(440, 120);
+    stopBgm();
     const cam = this.cameras.main;
     cam.fadeOut(250, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
@@ -285,7 +361,7 @@ export default class FieldScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.cmdLock) return;
+    if (this.cmdLock || isStatusOpen()) return;
     this.moveCd -= delta;
     if (this.moveCd > 0) return;
     const keys = this.cursors;

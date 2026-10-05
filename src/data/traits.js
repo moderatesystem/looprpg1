@@ -74,7 +74,7 @@ export function basePlayer() {
     growthHp: 0,
     quick: 0,
     gold: 0,
-    herbs: 3,
+    herbs: 1,
     traits: {}, // id -> stack数
   };
 }
@@ -96,4 +96,9 @@ export function applyTrait(player, traitId) {
   t.apply(player);
   player.traits[t.id] = (player.traits[t.id] || 0) + 1;
   return t;
+}
+
+export function traitLabel(id) {
+  const t = TRAITS.find((x) => x.id === id);
+  return t ? t.name : id;
 }

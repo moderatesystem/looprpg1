@@ -1,6 +1,6 @@
 // 敵定義＋生成（フィールド地形・プレイヤーLvでスケーリング）
 const TABLE = [
-  { id: 'slime', name: 'スライム', hp: 12, atk: 5, exp: 6, gold: 5, color: 0x3aa0ff },
+  { id: 'slime', name: 'スライム', hp: 12, atk: 5, exp: 4, gold: 5, color: 0x3aa0ff },
   { id: 'bat', name: 'コウモリ', hp: 10, atk: 7, exp: 8, gold: 7, color: 0x9a6bff },
   { id: 'goblin', name: 'ゴブリン', hp: 16, atk: 8, exp: 11, gold: 10, color: 0x4caf50 },
   { id: 'ghost', name: 'ゴースト', hp: 20, atk: 10, exp: 15, gold: 13, color: 0xcccccc },
@@ -9,11 +9,12 @@ const TABLE = [
 
 export const ENEMY_IDS = TABLE.map((e) => e.id);
 
-export function makeEnemy(playerLv, tile) {
-  // 森は強めが出やすい
+export function makeEnemy(playerLv, tile, danger = 1) {
+  // 森は強めが出やすい。dangerで地域補正（城周辺ほど弱い）
   const weights = TABLE.map((_, i) => {
     let w = 1;
     if (tile === 'T') w += i >= 2 ? 1.5 : 0;
+    if (i >= 3) w *= danger;
     if (playerLv >= 4 && i >= 3) w += 1;
     if (playerLv < 3 && i >= 3) w *= 0.3;
     return w;

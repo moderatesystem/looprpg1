@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { makeEnemy, makeBoss } from '../data/enemies';
-import { expForLevel, rollTraitChoices, applyTrait, LEVEL_CAP } from '../data/traits';
-import { gameState } from '../game/state';
+import { expForLevel, rollTraitChoices, applyTrait, traitLabel, LEVEL_CAP } from '../data/traits';
+import { gameState, respawn } from '../game/state';
 import { preloadEnemyArt, drawEnemyArt } from '../game/enemyArt';
-import { beep } from './FieldScene';
+import { toggleStatus, isStatusOpen } from '../game/statusUi';
+import { startBgm, stopBgm, beep, jingle } from '../game/sound';
 
 // DQ1風：戦闘はフィールドと完全分離した別画面
+// メッセージはキュー制（Z送り／自動送り）で「間」を作る
 export default class BattleScene extends Phaser.Scene {
   constructor() {
     super('battle');
@@ -19,18 +21,27 @@ export default class BattleScene extends Phaser.Scene {
   create(data) {
     this.cmdIndex = 0;
     this.over = false;
+    this.dead = false;
     this.returnTo = data.from || 'field';
     this.focusCount = 0;
+    this.msgQueue = [];
+    this.msgBusy = false;
+    this.msgTimer = null;
     gameState.player.prayed = false;
     this.enemy = data.boss
       ? makeBoss(gameState.player.lv)
-      : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.');
+      : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1);
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
     this.drawScreen();
-    this.setMessage(`${this.enemy.name} があらわれた！`);
+    startBgm('battle');
+    this.events.once('shutdown', stopBgm);
+    if (this.enemy.boss) {
+      this.cameras.main.shake(250, 0.008);
+      jingle('boss');
+    }
+    this.say(`${this.enemy.name} があらわれた！`);
 
-    this.cursors = this.input.keyboard.createCursorKeys();
     this.input.keyboard.on('keydown', (e) => this.handleKey(e));
   }
 
@@ -59,11 +70,50 @@ export default class BattleScene extends Phaser.Scene {
     this.cmdText.setText(lines.join('\n'));
   }
 
-  setMessage(t) { this.msgText.setText(t); }
+  // ---- メッセージキュー ----
+  say(text, cb, color) {
+    this.msgQueue.push({ text, cb, color });
+    if (!this.msgBusy) this.nextMsg();
+  }
+
+  nextMsg() {
+    const m = this.msgQueue[0];
+    if (!m) { this.msgBusy = false; return; }
+    this.msgBusy = true;
+    this.msgText.setText(m.text + ' ▼');
+    this.msgText.setColor(m.color || '#fff');
+    if (this.msgTimer) clearTimeout(this.msgTimer);
+    this.msgTimer = setTimeout(() => this.doneMsg(), 1100);
+  }
+
+  doneMsg() {
+    if (this.msgTimer) { clearTimeout(this.msgTimer); this.msgTimer = null; }
+    const m = this.msgQueue.shift();
+    this.msgBusy = false;
+    if (m && m.cb) { const cb = m.cb; cb(); return; }
+    if (this.msgQueue.length) this.nextMsg();
+  }
+
+  advanceMsg() {
+    if (this.msgBusy) this.doneMsg();
+  }
 
   handleKey(e) {
-    if (this.over) return;
+    if (e.repeat) return;
     const k = e.key;
+    if (this.dead) {
+      if (k === 'r' || k === 'R') location.reload();
+      return;
+    }
+    if (k === 't' || k === 'T') {
+      if (!this.over && !this.msgBusy) toggleStatus();
+      return;
+    }
+    if (isStatusOpen() || this.over) return;
+    if (this.msgBusy) {
+      if (['z', 'Z', ' ', 'Enter'].includes(k)) this.advanceMsg();
+      return;
+    }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') { this.cmdIndex = (this.cmdIndex + 3) % 4; this.refresh(); beep(500, 30); }
     else if (k === 'ArrowDown' || k === 's' || k === 'S') { this.cmdIndex = (this.cmdIndex + 1) % 4; this.refresh(); beep(500, 30); }
     else if (k === 'Enter' || k === ' ' || k === 'z' || k === 'Z') this.execCommand();
@@ -107,39 +157,40 @@ export default class BattleScene extends Phaser.Scene {
     const cmd = this.cmds[this.cmdIndex];
     const p = gameState.player;
     if (cmd === 'たたかう') {
-      // 毒ダメージ（敵ターン開始時扱い）
       if (this.enemy.poisonTurns > 0) {
         this.enemy.hp -= 4;
         this.enemy.poisonTurns -= 1;
-        if (this.enemy.hp <= 0) return this.winBattle('毒が効いた！ 4ダメージ！ ' + `${this.enemy.name}を倒した！`);
+        if (this.enemy.hp <= 0) {
+          jingle('poison');
+          return this.winBattle('毒が効いた！ 4ダメージ！', `${this.enemy.name}を倒した！`);
+        }
       }
       if (p.regen > 0) p.hp = Math.min(p.maxHp, p.hp + p.regen);
       const r = this.playerAttack();
-      beep(r.crit ? 900 : 600, 60);
+      if (r.crit) jingle('crit'); else beep(600, 60);
       const tag = `${r.hits > 1 ? r.hits + '回攻撃！' : ''}${r.focusCrit ? '必殺の一撃！' : r.crit ? 'かいしん！' : ''}${r.poisoned ? '毒を浴びせた！' : ''}`;
-      if (this.enemy.hp <= 0) return this.winBattle(`${tag}${r.total}ダメージ！ ${this.enemy.name}を倒した！`);
-      this.setMessage(`勇者の攻撃！ ${tag}${r.total}ダメージ！`);
-      this.enemyTurn();
+      if (this.enemy.hp <= 0) {
+        return this.winBattle(`勇者の攻撃！ ${tag}${r.total}ダメージ！`, `${this.enemy.name}を倒した！`, r.crit);
+      }
+      this.say(`勇者の攻撃！ ${tag}${r.total}ダメージ！`, () => this.enemyTurn(), r.crit ? '#ff0' : undefined);
     } else if (cmd === 'とくせい') {
-      const list = Object.entries(p.traits).map(([k, v]) => `${k}x${v}`).join(', ') || 'なし（LvUPで獲得）';
-      this.setMessage(`特性：${list} ※パッシブ発動中。ターンは進まない`);
+      const list = Object.entries(p.traits).map(([id, v]) => `${traitLabel(id)}x${v}`).join('、') || 'なし（LvUPで獲得）';
+      this.say(`特性：${list}`);
     } else if (cmd === 'どうぐ') {
-      if (p.herbs <= 0) { this.setMessage('やくそうがない！'); return; }
+      if (p.herbs <= 0) { this.say('やくそうがない！'); return; }
       p.herbs -= 1;
-      p.hp = Math.min(p.maxHp, p.hp + 15 + p.potionPower);
+      const heal = 15 + p.potionPower;
+      p.hp = Math.min(p.maxHp, p.hp + heal);
       beep(700, 80);
-      this.setMessage(`やくそうを使った！ HP+${15 + p.potionPower}（残り${p.herbs}）`);
-      this.enemyTurn();
+      this.say(`やくそうを使った！ HP+${heal}（残り${p.herbs}）`, () => this.enemyTurn());
     } else if (cmd === 'にげる') {
       if (this.enemy.boss) {
-        this.setMessage('まおうのてさきからは にげられない！');
-        this.enemyTurn();
+        this.say('まおうのてさきからは にげられない！', () => this.enemyTurn());
       } else if (Math.random() < Math.min(0.95, 0.55 + 0.15 * p.quick)) {
-        this.setMessage('うまくにげきれた！');
-        this.backToOrigin();
+        jingle('escape');
+        this.say('うまくにげきれた！', () => this.backToOrigin());
       } else {
-        this.setMessage('にげきれなかった！');
-        this.enemyTurn();
+        this.say('にげきれなかった！', () => this.enemyTurn());
       }
     }
     this.refresh();
@@ -150,7 +201,8 @@ export default class BattleScene extends Phaser.Scene {
     const e = this.enemy;
     if (e.hp <= 0) return;
     if (Math.random() < p.evadeChance) {
-      this.setMessage(`${this.msgText.text} ／ しかし 勇者はかわした！`);
+      this.say('しかし 勇者はかわした！');
+      this.refresh();
       return;
     }
     let dmg = e.atk + this.randInt(-2, 2) - p.armor;
@@ -161,62 +213,87 @@ export default class BattleScene extends Phaser.Scene {
       if (p.prayer && !p.prayed) {
         p.prayed = true;
         p.hp = 1;
-        this.setMessage(`敵の攻撃！ ${dmg}ダメージ！ しかし いのりが通じた！ HP1で耐えた！`);
+        jingle('pray');
+        this.say(`敵の攻撃！ ${dmg}ダメージ！ しかし いのりが通じた！ HP1で耐えた！`);
         this.refresh();
         return;
       }
       p.hp = 0;
-      this.over = true;
-      this.setMessage(`敵の攻撃！ ${dmg}ダメージ！ 勇者は倒れた…（Rでリスタート）`);
-      this.input.keyboard.once('keydown-R', () => location.reload());
       this.refresh();
-      return;
+      return this.onDeath(dmg);
     }
-    let msg = `${this.msgText.text} ／ 敵の攻撃！ ${dmg}ダメージ！（HP${p.hp}）`;
-    // 反撃
+    let msg = `敵の攻撃！ ${dmg}ダメージ！（HP${p.hp}）`;
     if (Math.random() < p.counterChance) {
       const cd = Math.max(1, Math.floor(p.atk / 2));
       e.hp -= cd;
       msg += ` はんげき！ ${cd}ダメージ！`;
-      if (e.hp <= 0) return this.winBattle(`${msg} ${e.name}を倒した！`);
+      if (e.hp <= 0) return this.winBattle(msg, `${e.name}を倒した！`);
     }
-    this.setMessage(msg);
+    this.say(msg);
+    this.refresh();
   }
 
-  winBattle(prefix) {
+  onDeath(dmg) {
+    this.over = true;
+    stopBgm();
+    this.say(`敵の攻撃！ ${dmg}ダメージ！ 勇者は倒れた…`, () => {
+      respawn(1, 5);
+      const cam = this.cameras.main;
+      cam.fadeOut(300, 0, 0, 0);
+      cam.once('camerafadeoutcomplete', () => {
+        this.scene.start('field');
+      });
+    });
+  }
+
+  winBattle(line1, line2, highlight) {
     const p = gameState.player;
     const isBoss = !!this.enemy.boss;
     const exp = Math.floor(this.enemy.exp * (1 + p.expBonus));
     const gold = Math.floor(this.enemy.gold * (1 + p.goldBonus));
     p.exp += exp;
     p.gold += gold;
-    beep(880, 120);
-    this.setMessage(`${prefix} EXP+${exp} G+${gold}`);
+    jingle('victory');
     this.refresh();
     let ups = 0;
+    let gainHp = 0;
+    let gainAtk = 0;
     while (p.exp >= p.next && p.lv < LEVEL_CAP) {
       p.exp -= p.next;
       p.lv += 1;
       p.next = expForLevel(p.lv);
-      p.maxHp += 6 + p.growthHp;
+      const h = 6 + p.growthHp;
+      p.maxHp += h;
       p.atk += 2;
-      p.hp = p.maxHp;
+      gainHp += h;
+      gainAtk += 2;
       ups += 1;
     }
+    // LvUP時は半分回復（宿屋の価値を残す）
+    if (ups > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp / 2));
+    const reward = `${line1} ${line2} EXP+${exp} G+${gold}`;
     if (isBoss) {
       gameState.bossDefeated = true;
       gameState.cleared = true;
       this.over = true;
-      this.setMessage(`${this.msgText.text} まおうのてさきを倒した！ 世界に平和が戻った！（プロトタイプクリア）`);
+      stopBgm();
+      this.say(reward, () => {
+        this.say(DIALOGUES_CLEAR, () => this.backToOrigin());
+      }, '#ff0');
       this.refresh();
       return;
     }
-    if (ups > 0) this.openTraitModal(ups);
-    else this.backToOrigin();
+    if (ups > 0) {
+      this.say(reward, () => this.openTraitModal(ups, p.lv, gainHp, gainAtk), highlight ? '#ff0' : undefined);
+    } else {
+      this.say(reward, () => this.backToOrigin(), highlight ? '#ff0' : undefined);
+    }
+    this.refresh();
   }
 
   backToOrigin() {
     this.over = true;
+    stopBgm();
     gameState.encounterGraceUntil = Date.now() + 1500;
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
@@ -225,12 +302,16 @@ export default class BattleScene extends Phaser.Scene {
     });
   }
 
-  openTraitModal(left) {
+  openTraitModal(left, lv, gainHp, gainAtk) {
     this.over = true;
+    stopBgm();
+    jingle('levelup');
+    this.cameras.main.flash(180, 255, 255, 255);
     const choices = rollTraitChoices(gameState.player.traits);
     const modal = document.getElementById('trait-modal');
     const box = document.getElementById('trait-choices');
-    document.getElementById('trait-lv').textContent = `Lv${gameState.player.lv} UP！ 特性を1つ選べ（残り${left}回）`;
+    document.getElementById('trait-lv').textContent =
+      `Lv${lv} UP！ HP+${gainHp} ATK+${gainAtk}！ 特性を1つ選べ（残り${left}回）`;
     box.innerHTML = '';
     choices.forEach((t) => {
       const b = document.createElement('button');
@@ -240,11 +321,12 @@ export default class BattleScene extends Phaser.Scene {
       b.onclick = () => {
         const got = applyTrait(gameState.player, t.id);
         beep(760, 100);
-        this.setMessage(`「${got.name}」を覚えた！ ${got.desc}`);
+        this.setDirectMessage(`「${got.name}」を覚えた！ ${got.desc}`);
         this.refresh();
-        if (left - 1 > 0) this.openTraitModal(left - 1);
+        if (left - 1 > 0) this.openTraitModal(left - 1, lv, 0, 0);
         else {
           modal.classList.add('hidden');
+          startBgm('battle');
           this.backToOrigin();
         }
       };
@@ -252,4 +334,14 @@ export default class BattleScene extends Phaser.Scene {
     });
     modal.classList.remove('hidden');
   }
+
+  setDirectMessage(t) {
+    if (this.msgTimer) { clearTimeout(this.msgTimer); this.msgTimer = null; }
+    this.msgQueue = [];
+    this.msgBusy = false;
+    this.msgText.setText(t);
+    this.msgText.setColor('#fff');
+  }
 }
+
+const DIALOGUES_CLEAR = 'まおうのてさきを倒した！ 世界に平和が戻った！（プロトタイプクリア）';

@@ -27,26 +27,37 @@ function drawEnemyShape(scene, enemy, cx, cy) {
   const g = scene.add.graphics();
   const c = enemy.color;
   if (enemy.id === 'slime') {
+    g.fillStyle(0x1a5fb4, 1); g.fillEllipse(cx, cy + 26, 134, 102);
     g.fillStyle(c, 1); g.fillEllipse(cx, cy + 20, 130, 100);
+    g.fillStyle(0xffffff, 0.85); g.fillEllipse(cx - 30, cy - 5, 34, 20);
     g.fillStyle(0xffffff, 1); g.fillCircle(cx - 25, cy + 10, 12); g.fillCircle(cx + 25, cy + 10, 12);
     g.fillStyle(0x000000, 1); g.fillCircle(cx - 25, cy + 12, 5); g.fillCircle(cx + 25, cy + 12, 5);
+    g.lineStyle(2, 0x000000, 1); g.beginPath(); g.arc(cx, cy + 32, 14, 0.3, Math.PI - 0.3); g.strokePath();
   } else if (enemy.id === 'bat') {
     g.fillStyle(c, 1);
     g.fillTriangle(cx - 90, cy - 30, cx - 20, cy - 30, cx - 45, cy + 25);
     g.fillTriangle(cx + 90, cy - 30, cx + 20, cy - 30, cx + 45, cy + 25);
     g.fillCircle(cx, cy, 28);
     g.fillStyle(0xff0000, 1); g.fillCircle(cx - 10, cy - 5, 5); g.fillCircle(cx + 10, cy - 5, 5);
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(cx - 8, cy + 8, cx - 4, cy + 8, cx - 6, cy + 14);
+    g.fillTriangle(cx + 8, cy + 8, cx + 4, cy + 8, cx + 6, cy + 14);
   } else if (enemy.id === 'goblin') {
     g.fillStyle(c, 1);
     g.fillTriangle(cx - 30, cy - 20, cx - 60, cy - 55, cx - 15, cy - 45);
     g.fillTriangle(cx + 30, cy - 20, cx + 60, cy - 55, cx + 15, cy - 45);
     g.fillCircle(cx, cy, 42);
+    g.fillStyle(0x2e7d32, 1); g.fillRect(cx - 30, cy - 34, 60, 8);
     g.fillStyle(0xffffff, 1); g.fillCircle(cx - 14, cy - 8, 9); g.fillCircle(cx + 14, cy - 8, 9);
     g.fillStyle(0x000000, 1); g.fillCircle(cx - 14, cy - 6, 4); g.fillCircle(cx + 14, cy - 6, 4);
+    g.fillStyle(0x1b5e20, 1); g.fillTriangle(cx - 6, cy + 12, cx + 6, cy + 12, cx, cy + 20);
   } else if (enemy.id === 'ghost') {
     g.fillStyle(c, 0.9); g.fillCircle(cx, cy - 10, 45);
     g.fillTriangle(cx - 45, cy - 10, cx + 45, cy - 10, cx, cy + 70);
+    g.fillStyle(0x101040, 1);
+    g.fillCircle(cx - 30, cy + 55, 10); g.fillCircle(cx, cy + 62, 10); g.fillCircle(cx + 30, cy + 55, 10);
     g.fillStyle(0x000000, 1); g.fillCircle(cx - 15, cy - 15, 7); g.fillCircle(cx + 15, cy - 15, 7);
+    g.fillStyle(0xffffff, 0.5); g.fillCircle(cx - 28, cy - 28, 8);
   } else if (enemy.id === 'demon') {
     g.fillStyle(c, 1);
     g.fillTriangle(cx - 40, cy - 40, cx - 70, cy - 100, cx - 15, cy - 60);
