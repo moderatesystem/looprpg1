@@ -30,7 +30,7 @@ export default class BattleScene extends Phaser.Scene {
     gameState.player.prayed = false;
     this.enemy = data.boss
       ? makeBoss(gameState.player.lv)
-      : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1);
+      : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1, data.pool || null);
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
     this.drawScreen();

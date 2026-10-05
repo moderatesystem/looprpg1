@@ -5,14 +5,21 @@ import { gameState, resetState } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
+import { regionAt, regionDanger } from '../data/regions';
 
-export const TILE = 32;
+export const TILE = 64;
 export { beep } from '../game/sound';
 
 const COLORS = {
   '#': 0x6b6259, '.': 0x4a8f3c, T: 0x2f6b2a, '~': 0x3a6fd8,
   C: 0xd8c23a, V: 0xb0722e, D: 0x5b2a86, S: 0x4a8f3c,
+  '+': 0x9c5a2a, ':': 0xe0c070,
 };
+
+// DQ1式の地形別遭遇率（草原=低、森・砂浜・橋=中）。橋は出現率ではなく
+// 「渡った先が強い」で警告するゲート扱いにする
+const TILE_DANGER = { '.': 1, T: 1.1, ':': 1.3, '+': 1.6, S: 1, C: 1, V: 1, D: 1 };
+const ENCOUNTER_RATE = { '.': 0.06, T: 0.12, ':': 0.12, '+': 0.12 };
 
 function npcColor(n) {
   if (n.inn) return 0xffd54f;
@@ -76,7 +83,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('大陸中央から出発。黄色＝城 紫＝洞窟 茶＝村。Eで話す、Tでステータス。隣の案内人に聞こう');
+      this.setMessage('大陸中央から出発。黄色＝城 紫＝洞窟 茶＝村 肌色＝砂浜 赤茶＝橋。橋の先は強い敵に注意！');
     }
 
     startBgm('field');
@@ -107,12 +114,14 @@ export default class FieldScene extends Phaser.Scene {
         g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
         const ax = x * TILE, ay = y * TILE;
         const off = (x * 5 + y * 11) % 3;
-        if (ch === '.') { g.fillStyle(shade(COLORS['.'], -25), 1); g.fillRect(ax + 6 + off * 6, ay + 18, 5, 5); }
-        if (ch === 'T') { g.fillStyle(0x1d4d1a, 1); g.fillRect(ax + 7 + off * 4, ay + 8, 10, 12); }
-        if (ch === '~') { g.fillStyle(0x9fc8ff, 1); g.fillRect(ax + 5, ay + 14 + (off % 2) * 6, 20, 2); }
-        if (ch === 'C') { g.fillStyle(0xffffff, 1); g.fillRect(ax + 12, ay + 6, 8, 12); }
-        if (ch === 'D') { g.fillStyle(0x000000, 1); g.fillRect(ax + 8, ay + 12, 16, 12); }
-        if (ch === 'V') { g.fillStyle(0x7a3b00, 1); g.fillRect(ax + 10, ay + 10, 12, 10); }
+        if (ch === '.') { g.fillStyle(shade(COLORS['.'], -25), 1); g.fillRect(ax + 12 + off * 12, ay + 36, 10, 10); }
+        if (ch === 'T') { g.fillStyle(0x1d4d1a, 1); g.fillRect(ax + 14 + off * 8, ay + 16, 20, 24); }
+        if (ch === '~') { g.fillStyle(0x9fc8ff, 1); g.fillRect(ax + 10, ay + 28 + (off % 2) * 12, 40, 4); }
+        if (ch === ':') { g.fillStyle(shade(COLORS[':'], -30), 1); g.fillRect(ax + 20 + off * 8, ay + 40, 8, 8); }
+        if (ch === '+') { g.fillStyle(0x6e3e1c, 1); g.fillRect(ax + 8, ay, 6, TILE - 1); g.fillRect(ax + 50, ay, 6, TILE - 1); }
+        if (ch === 'C') { g.fillStyle(0xffffff, 1); g.fillRect(ax + 24, ay + 12, 16, 24); }
+        if (ch === 'D') { g.fillStyle(0x000000, 1); g.fillRect(ax + 16, ay + 24, 32, 24); }
+        if (ch === 'V') { g.fillStyle(0x7a3b00, 1); g.fillRect(ax + 20, ay + 20, 24, 20); }
       }
     }
     for (const n of DIALOGUES.npcs) {
@@ -122,12 +131,12 @@ export default class FieldScene extends Phaser.Scene {
       } else {
         const c = npcColor(n);
         g.fillStyle(c, 1);
-        g.fillRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
-        g.lineStyle(2, 0x000000, 1);
-        g.strokeRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
+        g.fillRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
+        g.lineStyle(3, 0x000000, 1);
+        g.strokeRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
       }
-      this.add.text(n.x * TILE - 2, n.y * TILE - 15, n.name, {
-        fontSize: '10px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
+      this.add.text(n.x * TILE + 2, n.y * TILE - 18, n.name, {
+        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
       });
     }
     this.follower = this.add.rectangle(
@@ -144,12 +153,12 @@ export default class FieldScene extends Phaser.Scene {
     if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
     pg.clear();
     pg.fillStyle(0xffffff, 1);
-    pg.fillRect(px + 8, py + 8, 16, 16);
-    pg.lineStyle(2, 0x000000, 1);
-    pg.strokeRect(px + 8, py + 8, 16, 16);
+    pg.fillRect(px + 16, py + 16, 32, 32);
+    pg.lineStyle(3, 0x000000, 1);
+    pg.strokeRect(px + 16, py + 16, 32, 32);
     pg.fillStyle(0x000000, 1);
-    pg.fillRect(px + 12, py + 11, 3, 5);
-    pg.fillRect(px + 18, py + 11, 3, 5);
+    pg.fillRect(px + 24, py + 22, 6, 10);
+    pg.fillRect(px + 36, py + 22, 6, 10);
   }
 
   drawHud() {
@@ -164,8 +173,9 @@ export default class FieldScene extends Phaser.Scene {
   refreshStatus() {
     const p = gameState.player;
     const n = Object.keys(p.traits).length;
+    const region = this.currentRegion ? this.currentRegion() : null;
     this.statusText.setText(
-      `Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} EXP${p.exp}/${p.next} G${p.gold} 草${p.herbs} 特性${n}種 ${gameState.hasOrder ? '★王命' : ''}`
+      `Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} EXP${p.exp}/${p.next} G${p.gold} 草${p.herbs} 特性${n}種 ${gameState.hasOrder ? '★王命' : ''}${region ? ' ' + region.id : ''}`
     );
   }
 
@@ -307,13 +317,17 @@ export default class FieldScene extends Phaser.Scene {
     this.refreshStatus();
   }
 
-  passable(ch) { return ['.', 'T', 'C', 'V', 'D', 'S'].includes(ch); }
+  passable(ch) { return ['.', 'T', ':', '+', 'C', 'V', 'D', 'S'].includes(ch); }
+
+  // DQ1式：テリトリー（3x3）×地形タイルの危険度の高い方を採用
+  currentRegion() {
+    return regionAt(gameState.px, gameState.py);
+  }
 
   regionDanger() {
-    const d = Math.abs(gameState.px - 1) + Math.abs(gameState.py - 6);
-    if (d < 8) return 0.4;
-    if (d < 16) return 0.8;
-    return 1.2;
+    const region = this.currentRegion();
+    const ch = FIELD_MAP[gameState.py][gameState.px];
+    return Math.max(regionDanger(region), TILE_DANGER[ch] ?? 1);
   }
 
   tryMove(dx, dy) {
@@ -348,18 +362,24 @@ export default class FieldScene extends Phaser.Scene {
       return;
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
-    let rate = ch === 'T' ? 0.16 : 0.08;
+    if (ch === '+') {
+      this.setMessage('橋を渡った！ この先は強い敵が出るぞ！（エリア' + (this.currentRegion()?.id ?? '?') + '）');
+    }
+    let rate = ENCOUNTER_RATE[ch] ?? 0;
     rate = Math.max(0.02, rate * (1 - 0.1 * gameState.player.quick));
-    if (Math.random() < rate) this.enterBattle(ch);
+    if (Math.random() < rate) {
+      const region = this.currentRegion();
+      this.enterBattle(ch, this.regionDanger(), region ? region.pool : null);
+    }
   }
 
-  enterBattle(tile) {
+  enterBattle(tile, danger, pool) {
     this.cmdLock = true;
     stopBgm();
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start('battle', { tile, from: 'field', danger: this.regionDanger() });
+      this.scene.start('battle', { tile, from: 'field', danger: danger ?? this.regionDanger(), pool: pool ?? this.currentRegion()?.pool ?? null });
     });
   }
 

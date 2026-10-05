@@ -14,24 +14,34 @@ const TABLE = [
 
 export const ENEMY_IDS = TABLE.map((e) => e.id);
 
-export function makeEnemy(playerLv, tile, danger = 1) {
-  // 森は強めが出やすい。minLv未満は出にくい。dangerで地域補正（城周辺ほど弱い）
-  const weights = TABLE.map((e, i) => {
+const BY_ID = Object.fromEntries(TABLE.map((e) => [e.id, e]));
+
+export function makeEnemy(playerLv, tile, danger = 1, pool = null) {
+  // DQ式：テリトリーの遭遇表（pool）があればそこから抽選。なければ全種から重み付け。
+  // dangerは重みと実効Lvの両方に効く
+  const effLv = playerLv + Math.max(0, Math.floor((danger - 1) * 4));
+  let candidates = TABLE;
+  if (pool && pool.length) {
+    candidates = pool.map((id) => BY_ID[id]).filter(Boolean);
+    if (!candidates.length) candidates = TABLE;
+  }
+  const weights = candidates.map((e) => {
     let w = 1;
-    if (tile === 'T' && i >= 2) w += 1.5;
-    if (playerLv < e.minLv) w *= 0.15;
-    if (playerLv >= e.minLv + 3) w += 0.5;
-    if (i >= 6) w *= danger;
+    if (!pool && tile === 'T' && TABLE.indexOf(e) >= 2) w += 1.5;
+    if (effLv < e.minLv) w *= 0.15;
+    if (effLv >= e.minLv + 3) w += 0.5;
+    if (!pool && TABLE.indexOf(e) >= 6) w *= danger;
+    if (tile === '+' || tile === ':') w *= e.minLv >= 3 ? 1.5 : 0.8;
     return w;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
-  let base = TABLE[0];
-  for (let i = 0; i < TABLE.length; i++) {
+  let base = candidates[0];
+  for (let i = 0; i < candidates.length; i++) {
     r -= weights[i];
-    if (r <= 0) { base = TABLE[i]; break; }
+    if (r <= 0) { base = candidates[i]; break; }
   }
-  const lvBonus = Math.floor(playerLv / 2);
+  const lvBonus = Math.floor(effLv / 2);
   return {
     ...base,
     maxHp: base.hp + lvBonus * 3,
