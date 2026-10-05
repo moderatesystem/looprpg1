@@ -4,6 +4,7 @@ import DIALOGUES from '../data/dialogues.json';
 import { gameState, resetState } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
+import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
 
 export const TILE = 32;
 export { beep } from '../game/sound';
@@ -48,6 +49,10 @@ export default class FieldScene extends Phaser.Scene {
     super('field');
   }
 
+  preload() {
+    preloadCharArt(this);
+  }
+
   create() {
     const st = gameState;
     if (!st.initialized) {
@@ -71,7 +76,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('黄色＝城 紫＝洞窟 茶＝村。Eキーで話す、Tキーでステータス。王様(C)に会いに行こう');
+      this.setMessage('大陸中央から出発。黄色＝城 紫＝洞窟 茶＝村。Eで話す、Tでステータス。隣の案内人に聞こう');
     }
 
     startBgm('field');
@@ -90,6 +95,8 @@ export default class FieldScene extends Phaser.Scene {
     if (this.fieldGfx) this.fieldGfx.destroy();
     if (this.playerGfx) this.playerGfx.destroy();
     if (this.follower) this.follower.destroy();
+    if (this.npcImgs) this.npcImgs.forEach((i) => i.destroy());
+    this.npcImgs = [];
     const g = this.add.graphics();
     this.fieldGfx = g;
     for (let y = 0; y < FIELD_MAP.length; y++) {
@@ -109,11 +116,16 @@ export default class FieldScene extends Phaser.Scene {
       }
     }
     for (const n of DIALOGUES.npcs) {
-      const c = npcColor(n);
-      g.fillStyle(c, 1);
-      g.fillRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
-      g.lineStyle(2, 0x000000, 1);
-      g.strokeRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
+      const img = drawNpcFigure(this, n, n.x * TILE, n.y * TILE);
+      if (img) {
+        this.npcImgs.push(img);
+      } else {
+        const c = npcColor(n);
+        g.fillStyle(c, 1);
+        g.fillRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
+        g.lineStyle(2, 0x000000, 1);
+        g.strokeRect(n.x * TILE + 9, n.y * TILE + 9, 14, 14);
+      }
       this.add.text(n.x * TILE - 2, n.y * TILE - 15, n.name, {
         fontSize: '10px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
       });
@@ -128,8 +140,9 @@ export default class FieldScene extends Phaser.Scene {
 
   drawPlayer() {
     const pg = this.playerGfx;
-    pg.clear();
     const px = gameState.px * TILE, py = gameState.py * TILE;
+    if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
+    pg.clear();
     pg.fillStyle(0xffffff, 1);
     pg.fillRect(px + 8, py + 8, 16, 16);
     pg.lineStyle(2, 0x000000, 1);

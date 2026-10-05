@@ -4,6 +4,7 @@ import { gameState } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
+import { preloadCharArt, drawHeroFigure } from '../game/charArt';
 import { beep, TILE } from './FieldScene';
 
 const MAP = DIALOGUES.dungeon.map;
@@ -14,6 +15,10 @@ const OY = 5;
 export default class DungeonScene extends Phaser.Scene {
   constructor() {
     super('dungeon');
+  }
+
+  preload() {
+    preloadCharArt(this);
   }
 
   create() {
@@ -84,8 +89,9 @@ export default class DungeonScene extends Phaser.Scene {
 
   drawPlayer() {
     const pg = this.playerGfx;
-    pg.clear();
     const px = OX + this.dx * TILE, py = OY + this.dy * TILE;
+    if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
+    pg.clear();
     pg.fillStyle(0xffffff, 1);
     pg.fillRect(px + 8, py + 8, 16, 16);
     pg.lineStyle(2, 0x000000, 1);

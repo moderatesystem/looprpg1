@@ -10,6 +10,7 @@ window.game = new Phaser.Game({
   parent: 'game',
   backgroundColor: '#000',
   roundPixels: true,
+  pixelArt: true,
   physics: { default: 'arcade' },
   scene: [FieldScene, BattleScene, DungeonScene],
 });
