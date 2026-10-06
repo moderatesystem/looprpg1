@@ -76,10 +76,14 @@ export default class DungeonScene extends Phaser.Scene {
         const px = x * TILE, py = y * TILE;
         if (ch === '#') g.fillStyle(0x3a3a4a, 1);
         else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
+        else if (ch === 'K') g.fillStyle(gameState.hasKey ? 0x5a4a3a : 0x8a2a2a, 1);
         else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
         else if (ch === 'H') g.fillStyle(gameState.chestOpened ? 0x5a2a2a : 0xd8a03a, 1);
         else g.fillStyle(0x5a4a3a, 1);
         g.fillRect(px, py, TILE - 1, TILE - 1);
+        if (ch === 'K' && !gameState.hasKey) {
+          g.fillStyle(0xffd54f, 1); g.fillRect(px + 26, py + 24, 12, 16);
+        }
         if (ch === 'B' && !gameState.bossDefeated) {
           g.fillStyle(0xffffff, 1);
           g.fillTriangle(px + 12, py + 20, px + 24, py + 44, px + 12, py + 44);
@@ -132,12 +136,13 @@ export default class DungeonScene extends Phaser.Scene {
     if (this.cmdLock) return;
   }
 
-  passable(ch) { return ['.', 'S', 'H', 'B'].includes(ch); }
+  passable(ch) { return ['.', 'S', 'H', 'B', 'K'].includes(ch); }
 
   tryMove(dx, dy) {
     const nx = this.dx + dx, ny = this.dy + dy;
     if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) return;
     const ch = this.tileAt(nx, ny);
+    if (ch === 'K' && !gameState.hasKey) { beep(120, 60); this.setMessage('かぎがかかっている。先に宝箱(H)を開けよう。'); return; }
     if (!this.passable(ch)) { beep(120, 60); return; }
     this.dx = nx; this.dy = ny;
     this.moved = true;
@@ -174,6 +179,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   openChest() {
     gameState.chestOpened = true;
+    gameState.hasKey = true;
     const p = gameState.player;
     const c = DIALOGUES.dungeon.chest;
     p.gold += c.gold;

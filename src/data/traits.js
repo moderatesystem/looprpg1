@@ -19,7 +19,7 @@ export const TRAITS = [
     apply: (p) => { p.expBonus += 0.2; } },
   { id: "poison", name: "どく刃", desc: "25%で毒付与（3T）", maxStacks: 3,
     apply: (p) => { p.poisonChance += 0.25; } },
-  { id: "fire", name: "ほのお", desc: "攻撃に+3追加", maxStacks: 3,
+  { id: "fire", name: "ほのお", desc: "攻撃に+3追加＆とくせいで発動可", maxStacks: 3,
     apply: (p) => { p.burnDmg += 3; } },
   { id: "counter", name: "はんげき", desc: "15%で反撃", maxStacks: 3,
     apply: (p) => { p.counterChance += 0.15; } },

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { FIELD_MAP, findTile } from '../data/fieldMap';
 import DIALOGUES from '../data/dialogues.json';
-import { gameState, resetState } from '../game/state';
+import { gameState, resetState, saveGame, loadGame, hasSave } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
@@ -36,6 +36,15 @@ function shade(color, amt) {
   return (r << 16) | (g << 8) | b;
 }
 
+// テリトリー色（地面タイルのみ適用）。危険地帯ほど土の色が変わる
+function tone(color, t) {
+  if (!t) return color;
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 255) + t[0]));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 255) + t[1]));
+  const b = Math.max(0, Math.min(255, (color & 255) + t[2]));
+  return (r << 16) | (g << 8) | b;
+}
+
 export function villageAt(x, y) {
   return DIALOGUES.villages.find((v) => v.x === x && v.y === y) || null;
 }
@@ -63,13 +72,18 @@ export default class FieldScene extends Phaser.Scene {
   create() {
     const st = gameState;
     if (!st.initialized) {
-      const s = findTile(FIELD_MAP, 'S');
-      resetState(s.x, s.y);
+      if (hasSave() && typeof confirm === 'function' && confirm('冒険の記録がある。つづきから始めるか？（OK=つづき／キャンセル=はじめから）')) {
+        loadGame();
+      } else {
+        const s = findTile(FIELD_MAP, 'S');
+        resetState(s.x, s.y);
+      }
     }
 
     this.moveCd = 0;
     this.cmdLock = false;
     this.talk = null;
+    this.lastRegionId = this.currentRegion()?.id ?? null;
 
     this.drawField();
     this.drawHud();
@@ -83,7 +97,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('王の城前から出発。西の黄色い床で王さまに謁見しよう（Eで話す、Tでステータス）。門兵も話しかけられるぞ');
+      this.setMessage('王の城前から出発。西の黄色い床で王さまに謁見しよう（Eで話す、Tでステータス）。土の色が変わったら別のエリアだ');
     }
 
     startBgm('field');
@@ -110,7 +124,10 @@ export default class FieldScene extends Phaser.Scene {
       for (let x = 0; x < FIELD_MAP[y].length; x++) {
         const ch = FIELD_MAP[y][x];
         const v = ((x * 7 + y * 13) % 3) * 10 - 10;
-        g.fillStyle(shade(COLORS[ch] ?? 0x000000, v), 1);
+        const region = regionAt(x, y);
+        const ground = ['.', 'T', ':'].includes(ch);
+        const base = ground ? tone(COLORS[ch] ?? 0x000000, region?.tone) : (COLORS[ch] ?? 0x000000);
+        g.fillStyle(shade(base, v), 1);
         g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
         const ax = x * TILE, ay = y * TILE;
         const off = (x * 5 + y * 11) % 3;
@@ -241,6 +258,11 @@ export default class FieldScene extends Phaser.Scene {
       if (k === 'x' || k === 'X') return this.chooseShop(false);
       return;
     }
+    if (t.choice === 'church') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseChurch(true);
+      if (k === 'x' || k === 'X') return this.chooseChurch(false);
+      return;
+    }
     if (!okKeys.includes(k)) return;
     t.idx += 1;
     if (t.idx < t.lines.length) { this.showTalk(); return; }
@@ -250,14 +272,23 @@ export default class FieldScene extends Phaser.Scene {
       return;
     }
     if (t.npc && t.npc.shop) {
-      const s = t.npc.shop;
-      if (gameState.weaponBought) {
-        this.setMessage(`${t.name}「${s.name}は売り切れだ。また来てくれ。」`);
+      const stock = t.npc.shop.stock || [];
+      const idx = gameState.shopBought[t.npc.id] || 0;
+      const s = stock[idx];
+      if (!s) {
+        this.setMessage(`${t.name}「売り切れだ。また来てくれ。」`);
         t.done = true;
         return;
       }
       t.choice = 'shop';
-      this.setMessage(`${t.name}「${s.name} ${s.cost}G（ATK+${s.atk}）だ。買うか？（Z=買う X=やめる）」`);
+      const effect = s.atk ? `ATK+${s.atk}` : `守備+${s.armor}`;
+      const rest = stock.length - idx - 1 > 0 ? `（残り${stock.length - idx}品）` : '';
+      this.setMessage(`${t.name}「${s.name} ${s.cost}G（${effect}）だ${rest}。買うか？（Z=買う X=やめる）」`);
+      return;
+    }
+    if (t.npc && t.npc.church) {
+      t.choice = 'church';
+      this.setMessage(`${t.name}「おいのり（セーブ）をするか？（Z=する X=やめる）」`);
       return;
     }
     this.endTalk(t);
@@ -286,21 +317,43 @@ export default class FieldScene extends Phaser.Scene {
   chooseShop(yes) {
     const t = this.talk;
     const p = gameState.player;
-    const s = t.npc.shop;
-    if (yes) {
-      if (gameState.weaponBought) {
-        this.setMessage(`${t.name}「売り切れだよ。」`);
-      } else if (p.gold < s.cost) {
+    const stock = t.npc.shop.stock || [];
+    const idx = gameState.shopBought[t.npc.id] || 0;
+    const s = stock[idx];
+    if (!s) {
+      this.setMessage(`${t.name}「売り切れだよ。」`);
+    } else if (yes) {
+      if (p.gold < s.cost) {
         this.setMessage(`${t.name}「お金が足りないな。${s.cost}Gだ。」`);
       } else {
         p.gold -= s.cost;
-        p.atk += s.atk;
-        gameState.weaponBought = true;
+        if (s.atk) p.atk += s.atk;
+        if (s.armor) p.armor += s.armor;
+        gameState.shopBought[t.npc.id] = idx + 1;
+        if (t.npc.id === 'shop1' && idx === 0) gameState.weaponBought = true;
         jingle('shop');
-        this.setMessage(`「${s.name}」を買った！ ATK+${s.atk}！`);
+        const effect = s.atk ? `ATK+${s.atk}` : `守備+${s.armor}`;
+        this.setMessage(`「${s.name}」を買った！ ${effect}！`);
       }
     } else {
       this.setMessage(`${t.name}「そうか。また来てくれ。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseChurch(yes) {
+    const t = this.talk;
+    if (yes) {
+      if (saveGame()) {
+        jingle('pray');
+        this.setMessage('冒険の記録を残した！（セーブ完了）教会はいつでも再開できる。');
+      } else {
+        this.setMessage('記録に失敗した…。また試してくれ。');
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。神のご加護を。」`);
     }
     t.choice = null;
     t.done = true;
@@ -339,11 +392,13 @@ export default class FieldScene extends Phaser.Scene {
     gameState.px = nx; gameState.py = ny;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
     this.drawPlayer();
-    this.onEnterTile(ch);
+    const regionChanged = this.lastRegionId !== this.currentRegion()?.id;
+    this.lastRegionId = this.currentRegion()?.id ?? null;
+    this.onEnterTile(ch, regionChanged);
     this.refreshStatus();
   }
 
-  onEnterTile(ch) {
+  onEnterTile(ch, regionChanged = false) {
     if (ch === 'C') {
       this.setMessage('王の城だ。Eキーで 王さまに謁見できる。');
       return;
@@ -364,6 +419,11 @@ export default class FieldScene extends Phaser.Scene {
     if (Date.now() < gameState.encounterGraceUntil) return;
     if (ch === '+') {
       this.setMessage('橋を渡った！ この先は強い敵が出るぞ！（エリア' + (this.currentRegion()?.id ?? '?') + '）');
+    } else if (regionChanged && !this.cmdLock) {
+      const region = this.currentRegion();
+      if (region) {
+        this.setMessage(`― ${region.name}に入った！${region.lv >= 3 ? ' 強い敵に注意！' : ''}`);
+      }
     }
     let rate = ENCOUNTER_RATE[ch] ?? 0;
     rate = Math.max(0.02, rate * (1 - 0.1 * gameState.player.quick));

@@ -8,19 +8,20 @@ export const REGION_W = 10;
 export const REGION_H = 10;
 
 // lv: エリアレベル（高いほど強い）。pool: 出現5種（DQ式・重み付き順）。
+// tone: 地面タイルへの色補正 [r,g,b]。西=安全な緑、東=枯れた大地、北東=禍々しい紫
 export const REGIONS = [
   // y 0-9（北）
-  { id: 'A1', col: 0, row: 0, lv: 0, name: '城周辺', pool: ['slime', 'slime', 'bat', 'bat', 'goblin'] },
-  { id: 'A2', col: 1, row: 0, lv: 1, name: '北の森', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
-  { id: 'A3', col: 2, row: 0, lv: 4, name: '洞窟周辺', pool: ['ghost', 'skeleton', 'golem', 'mage', 'dragon'] },
+  { id: 'A1', col: 0, row: 0, lv: 0, name: '城周辺', tone: [10, 10, 0], pool: ['slime', 'slime', 'bat', 'bat', 'goblin'] },
+  { id: 'A2', col: 1, row: 0, lv: 1, name: '北の森', tone: [0, 12, 0], pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
+  { id: 'A3', col: 2, row: 0, lv: 4, name: '洞窟周辺', tone: [18, -6, 18], pool: ['ghost', 'skeleton', 'golem', 'mage', 'dragon'] },
   // y 10-19（中央）
-  { id: 'B1', col: 0, row: 1, lv: 1, name: '西の街道', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
-  { id: 'B2', col: 1, row: 1, lv: 1, name: '中央平原', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
-  { id: 'B3', col: 2, row: 1, lv: 3, name: '東の荒野', pool: ['goblin', 'wolf', 'ghost', 'skeleton', 'orc'] },
+  { id: 'B1', col: 0, row: 1, lv: 1, name: '西の街道', tone: [8, 8, 0], pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
+  { id: 'B2', col: 1, row: 1, lv: 1, name: '中央平原', tone: [0, 0, 0], pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
+  { id: 'B3', col: 2, row: 1, lv: 3, name: '東の荒野', tone: [20, -4, -10], pool: ['goblin', 'wolf', 'ghost', 'skeleton', 'orc'] },
   // y 20-29（南）
-  { id: 'C1', col: 0, row: 2, lv: 2, name: '南の村周辺', pool: ['bat', 'goblin', 'wolf', 'ghost', 'skeleton'] },
-  { id: 'C2', col: 1, row: 2, lv: 2, name: '南の街道', pool: ['bat', 'goblin', 'wolf', 'ghost', 'skeleton'] },
-  { id: 'C3', col: 2, row: 2, lv: 3, name: '南東の辺境', pool: ['goblin', 'wolf', 'ghost', 'orc', 'golem'] },
+  { id: 'C1', col: 0, row: 2, lv: 2, name: '南の村周辺', tone: [0, 6, 6], pool: ['bat', 'goblin', 'wolf', 'ghost', 'skeleton'] },
+  { id: 'C2', col: 1, row: 2, lv: 2, name: '南の街道', tone: [6, 0, 0], pool: ['bat', 'goblin', 'wolf', 'ghost', 'skeleton'] },
+  { id: 'C3', col: 2, row: 2, lv: 3, name: '南東の辺境', tone: [16, -8, 6], pool: ['goblin', 'wolf', 'ghost', 'orc', 'golem'] },
 ];
 
 export function regionAt(x, y) {

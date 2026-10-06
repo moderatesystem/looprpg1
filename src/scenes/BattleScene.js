@@ -167,15 +167,27 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (p.regen > 0) p.hp = Math.min(p.maxHp, p.hp + p.regen);
       const r = this.playerAttack();
-      if (r.crit) jingle('crit'); else beep(600, 60);
+      if (r.crit) { jingle('crit'); this.cameras.main.flash(120, 255, 255, 0); } else beep(600, 60);
       const tag = `${r.hits > 1 ? r.hits + '回攻撃！' : ''}${r.focusCrit ? '必殺の一撃！' : r.crit ? 'かいしん！' : ''}${r.poisoned ? '毒を浴びせた！' : ''}`;
       if (this.enemy.hp <= 0) {
         return this.winBattle(`勇者の攻撃！ ${tag}${r.total}ダメージ！`, `${this.enemy.name}を倒した！`, r.crit);
       }
       this.say(`勇者の攻撃！ ${tag}${r.total}ダメージ！`, () => this.enemyTurn(), r.crit ? '#ff0' : undefined);
     } else if (cmd === 'とくせい') {
-      const list = Object.entries(p.traits).map(([id, v]) => `${traitLabel(id)}x${v}`).join('、') || 'なし（LvUPで獲得）';
-      this.say(`特性：${list}`);
+      const fireN = p.traits.fire || 0;
+      if (fireN > 0 && this.enemy.hp > 0) {
+        const dmg = 5 + 5 * fireN;
+        this.enemy.hp -= dmg;
+        beep(850, 90);
+        this.cameras.main.flash(100, 255, 150, 0);
+        if (this.enemy.hp <= 0) {
+          return this.winBattle(`ほのおを放った！ ${dmg}ダメージ！`, `${this.enemy.name}を倒した！`);
+        }
+        this.say(`ほのおを放った！ ${dmg}ダメージ！`, () => this.enemyTurn(), '#fa0');
+      } else {
+        const list = Object.entries(p.traits).map(([id, v]) => `${traitLabel(id)}x${v}`).join('、') || 'なし（LvUPで獲得）';
+        this.say(`特性：${list}`);
+      }
     } else if (cmd === 'どうぐ') {
       if (p.herbs <= 0) { this.say('やくそうがない！'); return; }
       p.herbs -= 1;
@@ -209,6 +221,7 @@ export default class BattleScene extends Phaser.Scene {
     dmg = Math.max(1, Math.floor(dmg * (1 + p.berserkTaken)));
     p.hp -= dmg;
     beep(180, 90);
+    if (dmg >= 10) this.cameras.main.shake(120, 0.004);
     if (p.hp <= 0) {
       if (p.prayer && !p.prayed) {
         p.prayed = true;
