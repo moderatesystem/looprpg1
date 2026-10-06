@@ -75,6 +75,7 @@ export function basePlayer() {
     quick: 0,
     gold: 0,
     herbs: 1,
+    mats: { copper: 0 },
     traits: {}, // id -> stack数
   };
 }

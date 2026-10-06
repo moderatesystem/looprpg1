@@ -23,6 +23,8 @@ export default class BattleScene extends Phaser.Scene {
     this.over = false;
     this.dead = false;
     this.returnTo = data.from || 'field';
+    this.returnFloor = data.floor || 0;
+    this.returnPos = (data.sx != null && data.sy != null) ? { x: data.sx, y: data.sy } : null;
     this.focusCount = 0;
     this.msgQueue = [];
     this.msgBusy = false;
@@ -197,7 +199,7 @@ export default class BattleScene extends Phaser.Scene {
       this.say(`やくそうを使った！ HP+${heal}（残り${p.herbs}）`, () => this.enemyTurn());
     } else if (cmd === 'にげる') {
       if (this.enemy.boss) {
-        this.say('まおうのてさきからは にげられない！', () => this.enemyTurn());
+        this.say(`${this.enemy.name}からは にげられない！`, () => this.enemyTurn());
       } else if (Math.random() < Math.min(0.95, 0.55 + 0.15 * p.quick)) {
         jingle('escape');
         this.say('うまくにげきれた！', () => this.backToOrigin());
@@ -250,7 +252,7 @@ export default class BattleScene extends Phaser.Scene {
     this.over = true;
     stopBgm();
     this.say(`敵の攻撃！ ${dmg}ダメージ！ 勇者は倒れた…`, () => {
-      respawn(1, 5);
+      respawn();
       const cam = this.cameras.main;
       cam.fadeOut(300, 0, 0, 0);
       cam.once('camerafadeoutcomplete', () => {
@@ -311,7 +313,11 @@ export default class BattleScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start(this.returnTo);
+      if (this.returnTo === 'dungeon' && this.returnPos) {
+        this.scene.start('dungeon', { floor: this.returnFloor, sx: this.returnPos.x, sy: this.returnPos.y });
+      } else {
+        this.scene.start(this.returnTo);
+      }
     });
   }
 
@@ -357,4 +363,4 @@ export default class BattleScene extends Phaser.Scene {
   }
 }
 
-const DIALOGUES_CLEAR = 'まおうのてさきを倒した！ 世界に平和が戻った！（プロトタイプクリア）';
+const DIALOGUES_CLEAR = '坑底のぬしを倒した！ 坑道に平和が戻った！（プロトタイプクリア）';

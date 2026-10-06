@@ -5,11 +5,10 @@ import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
-import { beep, TILE } from './FieldScene';
+import { beep, TILE, copperCount } from './FieldScene';
 
-const MAP = DIALOGUES.dungeon.map;
-
-// 試練の洞窟（単層）。凡例 #:壁 .:床 S:入口（戻る） H:宝箱 B:ボス床
+// 坑道（複層）。凡例 #:壁 .:床 S:入口（キャンプに戻る） H:宝箱 B:ボス床
+// K:鍵扉（納品の鍵） G:階段（上下層を行き来） O:銅鉱脈（隣接Eキーで採取）
 export default class DungeonScene extends Phaser.Scene {
   constructor() {
     super('dungeon');
@@ -19,12 +18,30 @@ export default class DungeonScene extends Phaser.Scene {
     preloadCharArt(this);
   }
 
-  create() {
+  floorCfg() {
+    return DIALOGUES.dungeon.floors[this.floorIdx];
+  }
+
+  floorMap() {
+    return this.floorCfg().map;
+  }
+
+  create(data) {
     this.moveCd = 0;
     this.cmdLock = false;
     this.moved = false;
-    const s = this.findCh('S');
-    this.dx = s.x; this.dy = s.y;
+    this.floorIdx = data.floor || 0;
+    gameState.map = 'mine';
+    gameState.floor = this.floorIdx;
+    const MAP = this.floorMap();
+    if (data.sx != null && data.sy != null) {
+      this.dx = data.sx; this.dy = data.sy;
+    } else {
+      const s = this.findCh('S') || this.findCh('G');
+      this.dx = s.x; this.dy = s.y;
+    }
+    if (!gameState.mineMined) gameState.mineMined = {};
+    if (!gameState.mineMined[this.floorIdx]) gameState.mineMined[this.floorIdx] = {};
 
     this.drawMap();
     this.drawHud();
@@ -32,7 +49,7 @@ export default class DungeonScene extends Phaser.Scene {
     cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
     cam.startFollow(this.follower, false, 0.15, 0.15);
     cam.fadeIn(250, 0, 0, 0);
-    this.setMessage(`「${DIALOGUES.dungeon.name}」にもぐった。宝箱(H)と赤い床(B)に注意。入口(S)で戻れる`);
+    this.setMessage(`「${this.floorCfg().name}」にもぐった。光る岩は隣でEキーだ`);
     startBgm('dungeon');
     this.events.once('shutdown', stopBgm);
 
@@ -46,13 +63,21 @@ export default class DungeonScene extends Phaser.Scene {
   }
 
   findCh(ch) {
+    const MAP = this.floorMap();
     for (let y = 0; y < MAP.length; y++)
       for (let x = 0; x < MAP[y].length; x++)
         if (MAP[y][x] === ch) return { x, y };
-    return { x: 1, y: 1 };
+    return null;
   }
 
-  tileAt(x, y) { return MAP[y][x]; }
+  tileAt(x, y) { return this.floorMap()[y][x]; }
+
+  minedKey(x, y) { return `${x},${y}`; }
+
+  isMined(x, y) {
+    const m = gameState.mineMined[this.floorIdx] || {};
+    return !!m[this.minedKey(x, y)];
+  }
 
   drawMap() {
     if (this.follower) this.follower.destroy();
@@ -69,6 +94,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   drawTiles() {
     const g = this.mapGfx;
+    const MAP = this.floorMap();
     g.clear();
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
@@ -76,11 +102,18 @@ export default class DungeonScene extends Phaser.Scene {
         const px = x * TILE, py = y * TILE;
         if (ch === '#') g.fillStyle(0x3a3a4a, 1);
         else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
+        else if (ch === 'G') g.fillStyle(0x6e4a1c, 1);
+        else if (ch === 'O') g.fillStyle(this.isMined(x, y) ? 0x4a4a4a : 0xd87818, 1);
         else if (ch === 'K') g.fillStyle(gameState.hasKey ? 0x5a4a3a : 0x8a2a2a, 1);
         else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
         else if (ch === 'H') g.fillStyle(gameState.chestOpened ? 0x5a2a2a : 0xd8a03a, 1);
         else g.fillStyle(0x5a4a3a, 1);
         g.fillRect(px, py, TILE - 1, TILE - 1);
+        if (ch === 'O' && !this.isMined(x, y)) {
+          g.fillStyle(0xffe9a0, 1);
+          g.fillRect(px + 14, py + 14, 8, 8);
+          g.fillRect(px + 40, py + 36, 8, 8);
+        }
         if (ch === 'K' && !gameState.hasKey) {
           g.fillStyle(0xffd54f, 1); g.fillRect(px + 26, py + 24, 12, 16);
         }
@@ -91,6 +124,9 @@ export default class DungeonScene extends Phaser.Scene {
         }
         if (ch === 'H' && !gameState.chestOpened) {
           g.fillStyle(0x000000, 1); g.fillRect(px + 20, py + 24, 24, 16);
+        }
+        if (ch === 'G') {
+          g.fillStyle(0x2a1a0a, 1); g.fillRect(px + 16, py + 40, 32, 12);
         }
       }
     }
@@ -121,7 +157,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   refreshStatus() {
     const p = gameState.player;
-    this.statusText.setText(`Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} G${p.gold} 草${p.herbs} ＠${DIALOGUES.dungeon.name}`);
+    this.statusText.setText(`Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} G${p.gold} 草${p.herbs} 銅${copperCount()} ＠${this.floorCfg().name}`);
   }
 
   setMessage(t) { this.msgText.setText(t); }
@@ -133,18 +169,57 @@ export default class DungeonScene extends Phaser.Scene {
       if (!this.cmdLock) toggleStatus();
       return;
     }
-    if (this.cmdLock) return;
+    if (this.cmdLock || isStatusOpen()) return;
+    if (k === 'e' || k === 'E' || k === ' ') { this.tryMine(); return; }
   }
 
-  passable(ch) { return ['.', 'S', 'H', 'B', 'K'].includes(ch); }
+  adjacentOre() {
+    const MAP = this.floorMap();
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [dx, dy] of dirs) {
+      const nx = this.dx + dx, ny = this.dy + dy;
+      if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
+      if (MAP[ny][nx] === 'O' && !this.isMined(nx, ny)) return { x: nx, y: ny };
+    }
+    return null;
+  }
+
+  tryMine() {
+    const ore = this.adjacentOre();
+    if (!ore) {
+      // 枯渇済みの鉱脈に隣接しているか
+      const MAP = this.floorMap();
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dy] of dirs) {
+        const nx = this.dx + dx, ny = this.dy + dy;
+        if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
+        if (MAP[ny][nx] === 'O') { this.setMessage('掘り尽くされた鉱脈だ。'); return; }
+      }
+      return;
+    }
+    const rich = this.floorIdx >= 1;
+    const n = rich ? 2 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 2);
+    const p = gameState.player;
+    if (!p.mats) p.mats = { copper: 0 };
+    p.mats.copper += n;
+    gameState.mineMined[this.floorIdx][this.minedKey(ore.x, ore.y)] = true;
+    beep(760, 90);
+    this.setMessage(`銅鉱石を${n}個掘り当てた！（所持${p.mats.copper}個）`);
+    this.drawTiles();
+    this.refreshStatus();
+  }
+
+  passable(ch) { return ['.', 'S', 'H', 'B', 'K', 'G'].includes(ch); }
 
   tryMove(dx, dy) {
+    const MAP = this.floorMap();
     const nx = this.dx + dx, ny = this.dy + dy;
     if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) return;
     const ch = this.tileAt(nx, ny);
-    if (ch === 'K' && !gameState.hasKey) { beep(120, 60); this.setMessage('かぎがかかっている。先に宝箱(H)を開けよう。'); return; }
+    if (ch === 'K' && !gameState.hasKey) { beep(120, 60); this.setMessage('かぎがかかっている。銅3個を親方に渡して鍵をもらおう。'); return; }
     if (!this.passable(ch)) { beep(120, 60); return; }
     this.dx = nx; this.dy = ny;
+    gameState.px = nx; gameState.py = ny;
     this.moved = true;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
     this.drawPlayer();
@@ -157,6 +232,10 @@ export default class DungeonScene extends Phaser.Scene {
     if (ch === 'S') {
       if (!this.moved) return;
       this.exitDungeon();
+      return;
+    }
+    if (ch === 'G') {
+      this.switchFloor();
       return;
     }
     if (ch === 'H') {
@@ -173,13 +252,13 @@ export default class DungeonScene extends Phaser.Scene {
       return;
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
-    const rate = Math.max(0.02, 0.12 * (1 - 0.1 * gameState.player.quick));
+    const cfg = this.floorCfg();
+    const rate = Math.max(0.02, cfg.rate * (1 - 0.1 * gameState.player.quick));
     if (Math.random() < rate) this.enterBattle(false);
   }
 
   openChest() {
     gameState.chestOpened = true;
-    gameState.hasKey = true;
     const p = gameState.player;
     const c = DIALOGUES.dungeon.chest;
     p.gold += c.gold;
@@ -194,16 +273,42 @@ export default class DungeonScene extends Phaser.Scene {
     this.cmdLock = true;
     stopBgm();
     beep(200, 150);
+    const cfg = this.floorCfg();
+    gameState.px = this.dx; gameState.py = this.dy;
     const cam = this.cameras.main;
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
-      this.scene.start('battle', { tile: '.', from: 'dungeon', lvBonus: 2, boss: isBoss });
+      this.scene.start('battle', {
+        tile: '.', from: 'dungeon', floor: this.floorIdx,
+        sx: this.dx, sy: this.dy,
+        lvBonus: cfg.lvBonus || 0, boss: isBoss,
+        danger: cfg.danger || 1, pool: cfg.pool || null,
+      });
+    });
+  }
+
+  switchFloor() {
+    const next = this.floorIdx >= 1 ? 0 : 1;
+    const target = DIALOGUES.dungeon.floors[next];
+    let sx = 1, sy = 1;
+    outer: for (let y = 0; y < target.map.length; y++) {
+      for (let x = 0; x < target.map[y].length; x++) {
+        if (target.map[y][x] === 'G') { sx = x; sy = y; break outer; }
+      }
+    }
+    this.cmdLock = true;
+    stopBgm();
+    const cam = this.cameras.main;
+    cam.fadeOut(250, 0, 0, 0);
+    cam.once('camerafadeoutcomplete', () => {
+      this.scene.start('dungeon', { floor: next, sx, sy });
     });
   }
 
   exitDungeon() {
     this.cmdLock = true;
     stopBgm();
+    gameState.map = 'camp';
     const cam = this.cameras.main;
     cam.fadeOut(250, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {

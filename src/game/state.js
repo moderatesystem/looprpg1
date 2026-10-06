@@ -1,10 +1,13 @@
-// フィールド↔戦闘シーン間で共有する可変状態（シーン切替えでも保持される）
+// キャンプ↔坑道シーン間で共有する可変状態（シーン切替えでも保持される）
 import { basePlayer } from '../data/traits';
+import { CAMP_START } from '../data/fieldMap';
 
 export const gameState = {
   player: basePlayer(),
-  px: 1,
-  py: 1,
+  px: CAMP_START.x,
+  py: CAMP_START.y,
+  map: 'camp',
+  floor: 0,
   hasOrder: false,
   cleared: false,
   chestOpened: false,
@@ -12,6 +15,7 @@ export const gameState = {
   hasKey: false,
   weaponBought: false,
   shopBought: {},
+  mineMined: {},
   pendingMsg: null,
   encounterGraceUntil: 0,
   initialized: false,
@@ -21,6 +25,8 @@ export function resetState(sx, sy) {
   gameState.player = basePlayer();
   gameState.px = sx;
   gameState.py = sy;
+  gameState.map = 'camp';
+  gameState.floor = 0;
   gameState.hasOrder = false;
   gameState.cleared = false;
   gameState.chestOpened = false;
@@ -28,6 +34,7 @@ export function resetState(sx, sy) {
   gameState.hasKey = false;
   gameState.weaponBought = false;
   gameState.shopBought = {};
+  gameState.mineMined = {};
   gameState.pendingMsg = null;
   gameState.encounterGraceUntil = 0;
   gameState.initialized = true;
@@ -41,6 +48,8 @@ export function saveGame() {
       player: gameState.player,
       px: gameState.px,
       py: gameState.py,
+      map: gameState.map,
+      floor: gameState.floor,
       hasOrder: gameState.hasOrder,
       cleared: gameState.cleared,
       chestOpened: gameState.chestOpened,
@@ -48,6 +57,7 @@ export function saveGame() {
       hasKey: gameState.hasKey,
       weaponBought: gameState.weaponBought,
       shopBought: gameState.shopBought,
+      mineMined: gameState.mineMined,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     return true;
@@ -72,6 +82,8 @@ export function loadGame() {
     gameState.player = { ...basePlayer(), ...d.player };
     gameState.px = d.px;
     gameState.py = d.py;
+    gameState.map = d.map || 'camp';
+    gameState.floor = d.floor || 0;
     gameState.hasOrder = !!d.hasOrder;
     gameState.cleared = !!d.cleared;
     gameState.chestOpened = !!d.chestOpened;
@@ -79,6 +91,7 @@ export function loadGame() {
     gameState.hasKey = !!d.hasKey;
     gameState.weaponBought = !!d.weaponBought;
     gameState.shopBought = d.shopBought || {};
+    gameState.mineMined = d.mineMined || {};
     gameState.pendingMsg = '冒険の記録から再開した！（つづきからスタート）';
     gameState.encounterGraceUntil = Date.now() + 1500;
     gameState.initialized = true;
@@ -88,13 +101,15 @@ export function loadGame() {
   }
 }
 
-// DQ1式：全滅＝所持金半減・城前復活（経験・特性は保持）
-export function respawn(rx, ry) {
+// 全滅＝所持金半減・キャンプ復活（経験・特性は保持）
+export function respawn() {
   const p = gameState.player;
   p.gold = Math.floor(p.gold / 2);
   p.hp = p.maxHp;
   p.prayed = false;
-  gameState.px = rx;
-  gameState.py = ry;
-  gameState.pendingMsg = '王「おお勇者よ、死んでしまうとはなさけない。半分のゴールドを失ったが、再び旅立つのだ！」';
+  gameState.px = CAMP_START.x;
+  gameState.py = CAMP_START.y;
+  gameState.map = 'camp';
+  gameState.floor = 0;
+  gameState.pendingMsg = '親方「おおっ、死んでしまうとはなさけない。半分のゴールドを失ったが、再び掘るのだ！」';
 }
