@@ -97,7 +97,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('王の城前から出発。西の黄色い床で王さまに謁見しよう（Eで話す、Tでステータス）。土の色が変わったら別のエリアだ');
+      this.setMessage('大陸中央から出発。隣の案内人に話を聞こう（Eで話す、Tでステータス）。土の色が変わったら別のエリアだ');
     }
 
     startBgm('field');
