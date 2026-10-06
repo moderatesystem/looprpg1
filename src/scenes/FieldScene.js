@@ -83,7 +83,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('大陸中央から出発。黄色＝城 紫＝洞窟 茶＝村 肌色＝砂浜 赤茶＝橋。橋の先は強い敵に注意！');
+      this.setMessage('王の城前から出発。西の黄色い床で王さまに謁見しよう（Eで話す、Tでステータス）。門兵も話しかけられるぞ');
     }
 
     startBgm('field');
