@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { makeEnemy, makeBoss } from '../data/enemies';
 import { expForLevel, rollTraitChoices, applyTrait, traitLabel, LEVEL_CAP } from '../data/traits';
-import { gameState, respawn } from '../game/state';
+import { gameState, respawn, loadMeta, saveMeta, writeLegacy } from '../game/state';
 import { preloadEnemyArt, drawEnemyArt } from '../game/enemyArt';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, beep, jingle } from '../game/sound';
@@ -31,7 +31,7 @@ export default class BattleScene extends Phaser.Scene {
     this.msgTimer = null;
     gameState.player.prayed = false;
     this.enemy = data.boss
-      ? makeBoss(gameState.player.lv)
+      ? makeBoss(gameState.player.lv, gameState.bossName)
       : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1, data.pool || null);
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
@@ -290,6 +290,10 @@ export default class BattleScene extends Phaser.Scene {
     if (isBoss) {
       gameState.bossDefeated = true;
       gameState.cleared = true;
+      const meta = loadMeta();
+      meta.clears = (meta.clears || 0) + 1;
+      saveMeta(meta);
+      writeLegacy(gameState.loop);
       this.over = true;
       stopBgm();
       this.say(reward, () => {
@@ -363,4 +367,4 @@ export default class BattleScene extends Phaser.Scene {
   }
 }
 
-const DIALOGUES_CLEAR = '坑底のぬしを倒した！ 坑道に平和が戻った！（プロトタイプクリア）';
+const DIALOGUES_CLEAR = '坑道に平和が戻った！ 親方に次の坑道を聞こう。';

@@ -26,7 +26,7 @@ export function openStatus() {
   const copper = (p.mats && p.mats.copper) || 0;
   body.innerHTML =
     `<div class="st-row">Lv ${p.lv} ／ EXP ${p.exp}/${p.next} ／ G ${p.gold}G ／ やくそう${p.herbs}個</div>` +
-    `<div class="st-row">HP ${p.hp}/${p.maxHp} ／ ATK ${p.atk} ／ 守備 ${p.armor} ／ 銅${copper}個</div>` +
+    `<div class="st-row">HP ${p.hp}/${p.maxHp} ／ ATK ${p.atk} ／ 守備 ${p.armor} ／ 銅${copper}個 ／ ${gameState.loop}周目</div>` +
     `<div class="st-row">LvUPまでEXPあと${Math.max(0, p.next - p.exp)}（約${Math.max(1, Math.ceil(Math.max(0, p.next - p.exp) / (8 + p.lv * 3)))}戦）</div>` +
     `<div class="st-head">― 特性 ―</div>${traitLines}` +
     `<div class="st-hint">Tキーで閉じる</div>`;

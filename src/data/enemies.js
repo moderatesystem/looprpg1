@@ -58,10 +58,11 @@ export const BOSS = {
   color: 0xb71c1c, boss: true,
 };
 
-export function makeBoss(playerLv) {
+export function makeBoss(playerLv, name) {
   const b = Math.floor(playerLv / 2);
   return {
     ...BOSS,
+    name: name || BOSS.name,
     maxHp: BOSS.hp + b * 4,
     hp: BOSS.hp + b * 4,
     atk: BOSS.atk + b,

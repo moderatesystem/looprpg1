@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { FIELD_MAP, CAMP_START } from '../data/fieldMap';
 import DIALOGUES from '../data/dialogues.json';
-import { gameState, resetState, saveGame, loadGame, hasSave } from '../game/state';
+import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta, startNextLoop } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
@@ -42,6 +42,12 @@ export function npcAt(x, y) {
 
 export function copperCount() {
   return (gameState.player.mats && gameState.player.mats.copper) || 0;
+}
+
+function npcLines(npc) {
+  if (gameState.bossDefeated && npc.clear) return npc.clear;
+  if (gameState.hasOrder && npc.mid) return npc.mid;
+  return npc.lines;
 }
 
 function foremanStage() {
@@ -208,9 +214,7 @@ export default class FieldScene extends Phaser.Scene {
   tryTalk() {
     if (FIELD_MAP[gameState.py][gameState.px] === 'C') {
       const stage = foremanStage();
-      const lines = stage === 'ordered'
-        ? [`銅鉱石は${copperCount()}/3個だ。`, '上層坑道の光る岩を Eキーで掘るんだ。']
-        : DIALOGUES.foreman[stage];
+      const lines = this.foremanLines(stage);
       this.talk = { name: '親方', lines, idx: 0, choice: null, foremanStage: stage };
       this.cmdLock = true;
       this.showTalk();
@@ -218,9 +222,21 @@ export default class FieldScene extends Phaser.Scene {
     }
     const n = this.adjacentNpc();
     if (!n) { this.setMessage('この辺りには 誰もいないようだ。'); return; }
-    this.talk = { name: n.name, npc: n, lines: n.lines, idx: 0, choice: null };
+    this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
     this.cmdLock = true;
     this.showTalk();
+  }
+
+  foremanLines(stage) {
+    if (stage === 'ordered') return [`銅鉱石は${copperCount()}/3個だ。`, '上層坑道の光る岩を Eキーで掘るんだ。'];
+    if (stage === 'first' && loadMeta().loops >= 2) return DIALOGUES.foreman.firstDeja;
+    if (stage === 'clear') {
+      const c = loadMeta().clears || 1;
+      if (c >= 3) return DIALOGUES.foreman.clear3;
+      if (c === 2) return DIALOGUES.foreman.clear2;
+      return DIALOGUES.foreman.clear1;
+    }
+    return DIALOGUES.foreman[stage];
   }
 
   showTalk() {
@@ -258,6 +274,11 @@ export default class FieldScene extends Phaser.Scene {
     if (t.choice === 'deliver') {
       if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseDeliver(true);
       if (k === 'x' || k === 'X') return this.chooseDeliver(false);
+      return;
+    }
+    if (t.choice === 'next') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseNextLoop(true);
+      if (k === 'x' || k === 'X') return this.chooseNextLoop(false);
       return;
     }
     if (!okKeys.includes(k)) return;
@@ -304,6 +325,11 @@ export default class FieldScene extends Phaser.Scene {
         this.setMessage(`銅鉱石3個を渡すか？（Z=渡す X=やめる）`);
         return;
       }
+    }
+    if (t.foremanStage === 'clear') {
+      t.choice = 'next';
+      this.setMessage('次の坑道へ行くか？（Z=行く X=やめる）');
+      return;
     }
     this.endTalk(t);
   }
@@ -413,6 +439,19 @@ export default class FieldScene extends Phaser.Scene {
     }
     t.choice = null;
     t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseNextLoop(yes) {
+    if (yes) {
+      startNextLoop();
+      jingle('levelup');
+      this.setMessage('新しい坑道の噂だ！ 親方に会いに行こう。');
+    } else {
+      this.setMessage('親方「そうか。ゆっくり休んでいけ。」');
+    }
+    this.talk.choice = null;
+    this.talk.done = true;
     this.refreshStatus();
   }
 

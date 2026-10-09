@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import DIALOGUES from '../data/dialogues.json';
-import { gameState } from '../game/state';
+import { gameState, takeLegacy } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
@@ -74,6 +74,11 @@ export default class DungeonScene extends Phaser.Scene {
 
   minedKey(x, y) { return `${x},${y}`; }
 
+  veinAt(x, y) {
+    const veins = (gameState.veins && gameState.veins[this.floorIdx]) || [];
+    return veins.some(([vx, vy]) => vx === x && vy === y);
+  }
+
   isMined(x, y) {
     const m = gameState.mineMined[this.floorIdx] || {};
     return !!m[this.minedKey(x, y)];
@@ -103,16 +108,22 @@ export default class DungeonScene extends Phaser.Scene {
         if (ch === '#') g.fillStyle(0x3a3a4a, 1);
         else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
         else if (ch === 'G') g.fillStyle(0x6e4a1c, 1);
-        else if (ch === 'O') g.fillStyle(this.isMined(x, y) ? 0x4a4a4a : 0xd87818, 1);
         else if (ch === 'K') g.fillStyle(gameState.hasKey ? 0x5a4a3a : 0x8a2a2a, 1);
         else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
         else if (ch === 'H') g.fillStyle(gameState.chestOpened ? 0x5a2a2a : 0xd8a03a, 1);
         else g.fillStyle(0x5a4a3a, 1);
         g.fillRect(px, py, TILE - 1, TILE - 1);
-        if (ch === 'O' && !this.isMined(x, y)) {
-          g.fillStyle(0xffe9a0, 1);
-          g.fillRect(px + 14, py + 14, 8, 8);
-          g.fillRect(px + 40, py + 36, 8, 8);
+        if (this.veinAt(x, y)) {
+          if (this.isMined(x, y)) {
+            g.fillStyle(0x4a4a4a, 1);
+            g.fillRect(px + 14, py + 14, 36, 36);
+          } else {
+            g.fillStyle(0xd87818, 1);
+            g.fillRect(px + 8, py + 8, 48, 48);
+            g.fillStyle(0xffe9a0, 1);
+            g.fillRect(px + 14, py + 14, 8, 8);
+            g.fillRect(px + 40, py + 36, 8, 8);
+          }
         }
         if (ch === 'K' && !gameState.hasKey) {
           g.fillStyle(0xffd54f, 1); g.fillRect(px + 26, py + 24, 12, 16);
@@ -179,7 +190,7 @@ export default class DungeonScene extends Phaser.Scene {
     for (const [dx, dy] of dirs) {
       const nx = this.dx + dx, ny = this.dy + dy;
       if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
-      if (MAP[ny][nx] === 'O' && !this.isMined(nx, ny)) return { x: nx, y: ny };
+      if (this.veinAt(nx, ny) && !this.isMined(nx, ny)) return { x: nx, y: ny };
     }
     return null;
   }
@@ -193,7 +204,7 @@ export default class DungeonScene extends Phaser.Scene {
       for (const [dx, dy] of dirs) {
         const nx = this.dx + dx, ny = this.dy + dy;
         if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
-        if (MAP[ny][nx] === 'O') { this.setMessage('掘り尽くされた鉱脈だ。'); return; }
+        if (this.veinAt(nx, ny)) { this.setMessage('掘り尽くされた鉱脈だ…。また今度な。'); return; }
       }
       return;
     }
@@ -217,6 +228,7 @@ export default class DungeonScene extends Phaser.Scene {
     if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) return;
     const ch = this.tileAt(nx, ny);
     if (ch === 'K' && !gameState.hasKey) { beep(120, 60); this.setMessage('かぎがかかっている。銅3個を親方に渡して鍵をもらおう。'); return; }
+    if (this.veinAt(nx, ny) && !this.isMined(nx, ny)) { beep(120, 60); this.setMessage('銅の鉱脈だ。隣でEキーだ。'); return; }
     if (!this.passable(ch)) { beep(120, 60); return; }
     this.dx = nx; this.dy = ny;
     gameState.px = nx; gameState.py = ny;
@@ -263,10 +275,19 @@ export default class DungeonScene extends Phaser.Scene {
     const c = DIALOGUES.dungeon.chest;
     p.gold += c.gold;
     p.herbs += c.herbs;
-    const got = applyTrait(p, c.trait);
+    const got = applyTrait(p, gameState.chestTrait);
+    let msg = `${c.message} さらに「${got.name}」の力を得た！`;
+    const legacy = takeLegacy();
+    if (legacy) {
+      if (!p.mats) p.mats = { copper: 0 };
+      p.mats.copper += legacy.copper || 0;
+      p.herbs += legacy.herbs || 0;
+      msg += ` 誰かの置き土産（銅${legacy.copper || 0}・草${legacy.herbs || 0}）もあった！`;
+    }
     jingle('chest');
-    this.setMessage(`${c.message} ${DIALOGUES.dungeon.bossWarning}`);
+    this.setMessage(`${msg} ${DIALOGUES.dungeon.bossWarning}`);
     this.drawTiles();
+    this.refreshStatus();
   }
 
   enterBattle(isBoss) {
