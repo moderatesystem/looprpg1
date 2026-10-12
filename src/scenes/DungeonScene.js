@@ -105,6 +105,7 @@ export default class DungeonScene extends Phaser.Scene {
   drawTiles() {
     if (this.tileImgs) this.tileImgs.forEach((i) => i.destroy());
     this.tileImgs = [];
+    if (this.markGfx) this.markGfx.destroy();
     const g = this.mapGfx;
     const MAP = this.floorMap();
     g.clear();
@@ -125,33 +126,43 @@ export default class DungeonScene extends Phaser.Scene {
           else g.fillStyle(0x5a4a3a, 1);
           g.fillRect(px, py, TILE - 1, TILE - 1);
         }
-        if (ch === 'S') { g.fillStyle(0x3a6fd8, 1); g.fillRect(px + 14, py + 14, TILE - 28, TILE - 28); }
-        if (ch === 'G' && !imgOk) { g.fillStyle(0x6e4a1c, 1); g.fillRect(px, py, TILE - 1, TILE - 1); }
+      }
+    }
+    // マーカー類は前面レイヤーに描く（タイル画像は後生成＝前面になるため同Graphicsだと隠れる）
+    const m = this.add.graphics();
+    this.markGfx = m;
+    const hasFloorImg = this.textures.exists('t-dungeon-floor');
+    for (let y = 0; y < MAP.length; y++) {
+      for (let x = 0; x < MAP[y].length; x++) {
+        const ch = MAP[y][x];
+        const px = x * TILE, py = y * TILE;
+        if (ch === 'S') { m.fillStyle(0x3a6fd8, 1); m.fillRect(px + 14, py + 14, TILE - 28, TILE - 28); }
+        if (ch === 'G' && !hasFloorImg) { m.fillStyle(0x6e4a1c, 1); m.fillRect(px, py, TILE - 1, TILE - 1); }
         if (this.veinAt(x, y)) {
           if (this.isMined(x, y)) {
-            g.fillStyle(0x4a4a4a, 1);
-            g.fillRect(px + 14, py + 14, 36, 36);
+            m.fillStyle(0x4a4a4a, 1);
+            m.fillRect(px + 14, py + 14, 36, 36);
           } else {
-            g.fillStyle(0xd87818, 1);
-            g.fillRect(px + 8, py + 8, 48, 48);
-            g.fillStyle(0xffe9a0, 1);
-            g.fillRect(px + 14, py + 14, 8, 8);
-            g.fillRect(px + 40, py + 36, 8, 8);
+            m.fillStyle(0xd87818, 1);
+            m.fillRect(px + 8, py + 8, 48, 48);
+            m.fillStyle(0xffe9a0, 1);
+            m.fillRect(px + 14, py + 14, 8, 8);
+            m.fillRect(px + 40, py + 36, 8, 8);
           }
         }
         if (ch === 'K' && !gameState.hasKey) {
-          g.fillStyle(0xffd54f, 1); g.fillRect(px + 26, py + 24, 12, 16);
+          m.fillStyle(0xffd54f, 1); m.fillRect(px + 26, py + 24, 12, 16);
         }
         if (ch === 'B' && !gameState.bossDefeated) {
-          g.fillStyle(0xffffff, 1);
-          g.fillTriangle(px + 12, py + 20, px + 24, py + 44, px + 12, py + 44);
-          g.fillTriangle(px + 52, py + 20, px + 40, py + 44, px + 52, py + 44);
+          m.fillStyle(0xffffff, 1);
+          m.fillTriangle(px + 12, py + 20, px + 24, py + 44, px + 12, py + 44);
+          m.fillTriangle(px + 52, py + 20, px + 40, py + 44, px + 52, py + 44);
         }
         if (ch === 'H' && !gameState.chestOpened) {
-          g.fillStyle(0x000000, 1); g.fillRect(px + 20, py + 24, 24, 16);
+          m.fillStyle(0x000000, 1); m.fillRect(px + 20, py + 24, 24, 16);
         }
         if (ch === 'G') {
-          g.fillStyle(0x2a1a0a, 1); g.fillRect(px + 16, py + 40, 32, 12);
+          m.fillStyle(0x2a1a0a, 1); m.fillRect(px + 16, py + 40, 32, 12);
         }
       }
     }
