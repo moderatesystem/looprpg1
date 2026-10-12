@@ -14,6 +14,10 @@ const FILES = {
   'p-castle': 'assets/props/castle.png',
   'p-house': 'assets/props/house.png',
   'p-mine': 'assets/props/mine.png',
+  'p-pot': 'assets/props/pot.png',
+  'p-sign': 'assets/props/sign.png',
+  'p-throne': 'assets/props/throne.png',
+  'p-fountain': 'assets/props/fountain.png',
 };
 
 export function preloadTiles(scene) {

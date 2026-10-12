@@ -19,7 +19,7 @@ function npcColor(n) {
   if (n.shop) return 0x4fc3f7;
   if (n.smith) return 0xff6f00;
   if (n.church) return 0xffffff;
-  if (n.id === 'guard' || n.id === 'guard_in') return 0x7e9bff;
+  if (n.id === 'guard' || n.id === 'guard_in' || n.id === 'soldier') return 0x7e9bff;
   return 0xff9800;
 }
 
@@ -151,7 +151,26 @@ export default class TownScene extends Phaser.Scene {
             m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
           }
         }
-        if (ch === 'K') { m.fillStyle(0xd8c23a, 1); m.fillRect(px + 8, py + 8, TILE - 16, TILE - 16); }
+        if (ch === 'K') {
+          if (!putTile(this, 'p-throne', cx, cy, 60)) {
+            m.fillStyle(0xd8c23a, 1); m.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
+          }
+        }
+        if (ch === 'P') {
+          if (!putTile(this, 'p-pot', cx, cy, 44)) {
+            m.fillStyle(0x8d5a2b, 1); m.fillRect(px + 18, py + 22, 28, 26);
+          }
+        }
+        if (ch === 'N') {
+          if (!putTile(this, 'p-sign', cx, cy, 40)) {
+            m.fillStyle(0x6e3e1c, 1); m.fillRect(px + 26, py + 14, 12, 36);
+          }
+        }
+        if (ch === 'F') {
+          if (!putTile(this, 'p-fountain', cx, cy, 60)) {
+            m.fillStyle(0x3a6fd8, 1); m.fillRect(px + 12, py + 12, 40, 40);
+          }
+        }
         if (ch === 'B') {
           const b = (town.chests || []).find((c) => c.x === x && c.y === y);
           const opened = b && gameState.castleChests[`${this.townId}:${b.id}`];
@@ -261,7 +280,52 @@ export default class TownScene extends Phaser.Scene {
         return;
       }
     }
+    const found = this.adjacentProp();
+    if (found) {
+      if (found.kind === 'P') { this.openPot(found); return; }
+      if (found.kind === 'N') {
+        const s = (this.town().signs || []).find((v) => v.x === found.x && v.y === found.y);
+        this.setMessage(s ? `「${s.text}」と書いてある。` : '古い立て札だ。文字が読めない。');
+        return;
+      }
+      if (found.kind === 'F') {
+        this.setMessage(this.town().fountain || '冷たい水が湧いている。');
+        return;
+      }
+    }
     this.setMessage('この辺りには 誰もいないようだ。');
+  }
+
+  adjacentProp() {
+    const MAP = this.town().map;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [dx, dy] of dirs) {
+      const nx = this.tx + dx, ny = this.ty + dy;
+      if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
+      const ch = MAP[ny][nx];
+      if (ch === 'P' || ch === 'N' || ch === 'F') return { kind: ch, x: nx, y: ny };
+    }
+    return null;
+  }
+
+  openPot(found) {
+    const key = `${this.townId}:${found.x},${found.y}`;
+    if (gameState.castleChests[key]) {
+      this.setMessage('空っぽの壺だ。');
+      return;
+    }
+    const pot = ((this.town().pots) || []).find((p) => p.x === found.x && p.y === found.y);
+    gameState.castleChests[key] = true;
+    const p = gameState.player;
+    const g = (pot && pot.gold) || 0;
+    const h = (pot && pot.herbs) || 0;
+    p.gold += g;
+    p.herbs += h;
+    beep(700, 80);
+    if (!g && !h) this.setMessage('壺を調べたが 何もなかった。');
+    else this.setMessage(`壺を調べた！${g ? ` ${g}G` : ''}${h ? ` やくそう${h}個` : ''}手に入れた！`);
+    this.drawTown();
+    this.refreshStatus();
   }
 
   kingLines(stage) {
