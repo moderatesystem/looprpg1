@@ -5,6 +5,7 @@ import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
+import { preloadTiles, putTile } from '../game/tileArt';
 import { beep, TILE, copperCount } from './FieldScene';
 
 // 坑道（複層）。凡例 #:壁 .:床 S:入口（キャンプに戻る） H:宝箱 B:ボス床
@@ -16,6 +17,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   preload() {
     preloadCharArt(this);
+    preloadTiles(this);
   }
 
   floorCfg() {
@@ -108,14 +110,17 @@ export default class DungeonScene extends Phaser.Scene {
       for (let x = 0; x < MAP[y].length; x++) {
         const ch = MAP[y][x];
         const px = x * TILE, py = y * TILE;
-        if (ch === '#') g.fillStyle(0x3a3a4a, 1);
-        else if (ch === 'S') g.fillStyle(0x3a6fd8, 1);
-        else if (ch === 'G') g.fillStyle(0x6e4a1c, 1);
-        else if (ch === 'K') g.fillStyle(gameState.hasKey ? 0x5a4a3a : 0x8a2a2a, 1);
-        else if (ch === 'B') g.fillStyle(gameState.bossDefeated ? 0x4a2a2a : 0x7a1a1a, 1);
-        else if (ch === 'H') g.fillStyle(gameState.chestOpened ? 0x5a2a2a : 0xd8a03a, 1);
-        else g.fillStyle(0x5a4a3a, 1);
-        g.fillRect(px, py, TILE - 1, TILE - 1);
+        const cx = px + TILE / 2, cy = py + TILE / 2;
+        let imgOk = false;
+        if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
+        else imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
+        if (!imgOk) {
+          if (ch === '#') g.fillStyle(0x3a3a4a, 1);
+          else g.fillStyle(0x5a4a3a, 1);
+          g.fillRect(px, py, TILE - 1, TILE - 1);
+        }
+        if (ch === 'S') { g.fillStyle(0x3a6fd8, 1); g.fillRect(px + 14, py + 14, TILE - 28, TILE - 28); }
+        if (ch === 'G' && !imgOk) { g.fillStyle(0x6e4a1c, 1); g.fillRect(px, py, TILE - 1, TILE - 1); }
         if (this.veinAt(x, y)) {
           if (this.isMined(x, y)) {
             g.fillStyle(0x4a4a4a, 1);

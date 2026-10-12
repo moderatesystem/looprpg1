@@ -5,6 +5,7 @@ import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta, startNext
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
+import { preloadTiles, putTile } from '../game/tileArt';
 import { regionAt, regionDanger } from '../data/regions';
 
 export const TILE = 64;
@@ -86,6 +87,23 @@ export default class FieldScene extends Phaser.Scene {
 
   preload() {
     preloadCharArt(this);
+    preloadTiles(this);
+  }
+
+  // 生成タイルがあれば画像描画。なければfalse（矩形フォールバック用）
+  drawTileImage(x, y, ch, cx, cy) {
+    let baseKey = null;
+    if (ch === '#') baseKey = 't-mountain';
+    else if (ch === '~') baseKey = 't-water';
+    else if (ch === ':') baseKey = 't-sand';
+    else if (ch === '+') baseKey = 't-bridge';
+    else baseKey = ((x * 7 + y * 13) % 2 === 0) ? 't-grass-a' : 't-grass-b';
+    if (!putTile(this, baseKey, cx, cy, TILE)) return false;
+    if (ch === 'T') putTile(this, 'p-tree', cx, cy, 54);
+    else if (ch === 'C') putTile(this, 'p-castle', cx, cy - 6, 92);
+    else if (ch === 'V') putTile(this, 'p-house', cx, cy, 60);
+    else if (ch === 'D') putTile(this, 'p-mine', cx, cy, TILE);
+    return true;
   }
 
   create() {
@@ -147,6 +165,8 @@ export default class FieldScene extends Phaser.Scene {
     for (let y = 0; y < FIELD_MAP.length; y++) {
       for (let x = 0; x < FIELD_MAP[y].length; x++) {
         const ch = FIELD_MAP[y][x];
+        const cx = x * TILE + TILE / 2, cy = y * TILE + TILE / 2;
+        if (this.drawTileImage(x, y, ch, cx, cy)) continue;
         const v = ((x * 7 + y * 13) % 3) * 10 - 10;
         const region = regionAt(x, y);
         const ground = ['.', 'T', ':'].includes(ch);
