@@ -21,7 +21,6 @@ export default class BattleScene extends Phaser.Scene {
   create(data) {
     this.cmdIndex = 0;
     this.over = false;
-    this.dead = false;
     this.returnTo = data.from || 'field';
     this.returnFloor = data.floor || 0;
     this.returnPos = (data.sx != null && data.sy != null) ? { x: data.sx, y: data.sy } : null;
@@ -103,10 +102,6 @@ export default class BattleScene extends Phaser.Scene {
   handleKey(e) {
     if (e.repeat) return;
     const k = e.key;
-    if (this.dead) {
-      if (k === 'r' || k === 'R') location.reload();
-      return;
-    }
     if (k === 't' || k === 'T') {
       if (!this.over && !this.msgBusy) toggleStatus();
       return;
@@ -302,10 +297,11 @@ export default class BattleScene extends Phaser.Scene {
       this.refresh();
       return;
     }
+    const reward2 = `${line2} EXP+${exp} G+${gold}`;
     if (ups > 0) {
-      this.say(reward, () => this.openTraitModal(ups, p.lv, gainHp, gainAtk), highlight ? '#ff0' : undefined);
+      this.say(line1, () => this.say(reward2, () => this.openTraitModal(ups, p.lv, gainHp, gainAtk), highlight ? '#ff0' : undefined));
     } else {
-      this.say(reward, () => this.backToOrigin(), highlight ? '#ff0' : undefined);
+      this.say(line1, () => this.say(reward2, () => this.backToOrigin(), highlight ? '#ff0' : undefined));
     }
     this.refresh();
   }

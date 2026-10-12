@@ -103,6 +103,8 @@ export default class DungeonScene extends Phaser.Scene {
   }
 
   drawTiles() {
+    if (this.tileImgs) this.tileImgs.forEach((i) => i.destroy());
+    this.tileImgs = [];
     const g = this.mapGfx;
     const MAP = this.floorMap();
     g.clear();
@@ -114,7 +116,10 @@ export default class DungeonScene extends Phaser.Scene {
         let imgOk = null;
         if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
         else imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
-        if (imgOk && ch !== '#') { const hh = tileHash(x + 31, y + 17); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
+        if (imgOk) {
+          if (ch !== '#') { const hh = tileHash(x + 31, y + 17); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
+          this.tileImgs.push(imgOk);
+        }
         if (!imgOk) {
           if (ch === '#') g.fillStyle(0x3a3a4a, 1);
           else g.fillStyle(0x5a4a3a, 1);

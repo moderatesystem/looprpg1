@@ -227,5 +227,5 @@ export function respawn() {
   gameState.py = CAMP_START.y;
   gameState.map = 'camp';
   gameState.floor = 0;
-  gameState.pendingMsg = '親方「おおっ、死んでしまうとはなさけない。半分のゴールドを失ったが、再び掘るのだ！」';
+  gameState.pendingMsg = '門兵「おっと、倒れていたぞ！ 城まで運んでやった。半分のゴールドは治療代だ。再び行くのだ！」';
 }

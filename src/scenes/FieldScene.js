@@ -143,7 +143,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('城前から出発。黄色い城で王さまに謁見しよう（Eで話す、Tでステータス）。土の色が変わったら別のエリアだ');
+      this.setMessage('城前から出発。西の城の黄色い床に乗ってEキーで謁見（Tでステータス）');
     }
 
     startBgm('field');
@@ -301,7 +301,18 @@ export default class FieldScene extends Phaser.Scene {
       return;
     }
     const n = this.adjacentNpc();
-    if (!n) { this.setMessage('この辺りには 誰もいないようだ。'); return; }
+    if (!n) {
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dy] of dirs) {
+        const nx = gameState.px + dx, ny = gameState.py + dy;
+        if (ny >= 0 && nx >= 0 && ny < FIELD_MAP.length && nx < FIELD_MAP[0].length && FIELD_MAP[ny][nx] === 'C') {
+          this.setMessage('城の黄色い床の上で Eキーを押すんだ。');
+          return;
+        }
+      }
+      this.setMessage('この辺りには 誰もいないようだ。');
+      return;
+    }
     if (n.foremanNpc) {
       const stage = this.foremanFieldStage();
       const lines = stage === 'ordered'
@@ -591,7 +602,7 @@ export default class FieldScene extends Phaser.Scene {
 
   onEnterTile(ch, regionChanged = false) {
     if (ch === 'C') {
-      this.setMessage('王の城だ。Eキーで 王さまに謁見できる。');
+      this.setMessage('王の城だ。黄色い床の上で Eキーで謁見できる。');
       return;
     }
     if (ch === 'V') {
