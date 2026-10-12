@@ -143,7 +143,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('城前から出発。西の城の黄色い床に乗ってEキーで謁見（Tでステータス）');
+      this.setMessage('城前から出発。東の城の黄色い床に乗ってEキーで謁見（Tでステータス）');
     }
 
     startBgm('field');

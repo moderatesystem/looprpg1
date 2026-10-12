@@ -1,7 +1,7 @@
 // DQ1式エリア分割の簡略版
 // 本家は8x8=64テリトリー（各15x15マス）＋テリトリー毎に5種の遭遇表。
 // 本作30x30に合わせて3x3=9テリトリー（各10x10マス）に落とし込む。
-// 城のある西を安全、洞窟のある北東を危険にする勾配＋橋ゲートで警告する。
+// 城のある中央を安全、洞窟のある北東を危険にする勾配＋橋ゲートで警告する。
 export const REGION_COLS = 3;
 export const REGION_ROWS = 3;
 export const REGION_W = 10;
@@ -10,12 +10,12 @@ export const REGION_H = 10;
 // lv: エリアレベル（高いほど強い）。pool: 出現5種（DQ式・重み付き順）。
 export const REGIONS = [
   // y 0-9（北）
-  { id: 'A1', col: 0, row: 0, lv: 0, name: '城周辺', pool: ['slime', 'slime', 'bat', 'bat', 'goblin'] },
+  { id: 'A1', col: 0, row: 0, lv: 1, name: '西の荒野', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
   { id: 'A2', col: 1, row: 0, lv: 1, name: '北の森', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
   { id: 'A3', col: 2, row: 0, lv: 4, name: '洞窟周辺', pool: ['ghost', 'skeleton', 'golem', 'mage', 'dragon'] },
   // y 10-19（中央）
   { id: 'B1', col: 0, row: 1, lv: 1, name: '西の街道', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
-  { id: 'B2', col: 1, row: 1, lv: 1, name: '中央平原', pool: ['slime', 'bat', 'goblin', 'wolf', 'ghost'] },
+  { id: 'B2', col: 1, row: 1, lv: 0, name: '城周辺', pool: ['slime', 'slime', 'bat', 'bat', 'goblin'] },
   { id: 'B3', col: 2, row: 1, lv: 3, name: '東の荒野', pool: ['goblin', 'wolf', 'ghost', 'skeleton', 'orc'] },
   // y 20-29（南）
   { id: 'C1', col: 0, row: 2, lv: 2, name: '南の村周辺', pool: ['bat', 'goblin', 'wolf', 'ghost', 'skeleton'] },
