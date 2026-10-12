@@ -1,20 +1,25 @@
 import Phaser from 'phaser';
-import { FIELD_MAP, CAMP_START } from '../data/fieldMap';
+import { FIELD_MAP, findTile } from '../data/fieldMap';
 import DIALOGUES from '../data/dialogues.json';
 import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta, startNextLoop } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
+import { regionAt, regionDanger } from '../data/regions';
 
 export const TILE = 64;
 export { beep } from '../game/sound';
 
-// 坑道キャンプは安全地帯（遭遇なし）。危険は坑道フロア側で管理する
 const COLORS = {
-  '#': 0x6b6259, '.': 0x8a7a4a, T: 0x2f6b2a, '~': 0x3a6fd8,
-  C: 0xd8c23a, V: 0xb0722e, D: 0x5b2a86, S: 0x8a7a4a,
+  '#': 0x6b6259, '.': 0x4a8f3c, T: 0x2f6b2a, '~': 0x3a6fd8,
+  C: 0xd8c23a, V: 0xb0722e, D: 0x5b2a86, S: 0x4a8f3c,
   '+': 0x9c5a2a, ':': 0xe0c070,
 };
+
+// DQ1式の地形別遭遇率（草原=低、森・砂浜・橋=中）。橋は出現率ではなく
+// 「渡った先が強い」で警告するゲート扱いにする
+const TILE_DANGER = { '.': 1, T: 1.1, ':': 1.3, '+': 1.6, S: 1, C: 1, V: 1, D: 1 };
+const ENCOUNTER_RATE = { '.': 0.06, T: 0.12, ':': 0.12, '+': 0.12 };
 
 function npcColor(n) {
   if (n.inn) return 0xffd54f;
@@ -22,6 +27,7 @@ function npcColor(n) {
   if (n.smith) return 0xff6f00;
   if (n.church) return 0xffffff;
   if (n.id === 'guard') return 0x7e9bff;
+  if (n.foremanNpc) return 0xd84315;
   return 0xff9800;
 }
 
@@ -29,6 +35,15 @@ function shade(color, amt) {
   const r = Math.max(0, Math.min(255, ((color >> 16) & 255) + amt));
   const g = Math.max(0, Math.min(255, ((color >> 8) & 255) + amt));
   const b = Math.max(0, Math.min(255, (color & 255) + amt));
+  return (r << 16) | (g << 8) | b;
+}
+
+// テリトリー色（地面タイルのみ適用）。危険地帯ほど土の色が変わる
+function tone(color, t) {
+  if (!t) return color;
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 255) + t[0]));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 255) + t[1]));
+  const b = Math.max(0, Math.min(255, (color & 255) + t[2]));
   return (r << 16) | (g << 8) | b;
 }
 
@@ -50,9 +65,16 @@ function npcLines(npc) {
   return npc.lines;
 }
 
-function foremanStage() {
+function kingStage() {
   if (!gameState.hasOrder) return 'first';
   if (gameState.bossDefeated) return 'clear';
+  if (gameState.chestOpened) return 'chest';
+  return 'ordered';
+}
+
+function foremanFieldStage() {
+  if (!gameState.hasOrder) return 'pre';
+  if (gameState.bossDefeated) return 'clearF';
   if (gameState.hasKey) return 'key';
   return 'ordered';
 }
@@ -72,7 +94,8 @@ export default class FieldScene extends Phaser.Scene {
       if (hasSave() && typeof confirm === 'function' && confirm('冒険の記録がある。つづきから始めるか？（OK=つづき／キャンセル=はじめから）')) {
         loadGame();
       } else {
-        resetState(CAMP_START.x, CAMP_START.y);
+        const s = findTile(FIELD_MAP, 'S');
+        resetState(s.x, s.y);
       }
     }
     // セーブ地点が坑道内なら坑道シーンへ直行する
@@ -84,6 +107,7 @@ export default class FieldScene extends Phaser.Scene {
     this.moveCd = 0;
     this.cmdLock = false;
     this.talk = null;
+    this.lastRegionId = this.currentRegion()?.id ?? null;
 
     this.drawField();
     this.drawHud();
@@ -97,7 +121,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('坑道キャンプだ。西の小屋で親方に会おう（Eで話す、Tでステータス）。ここは安全地帯だ');
+      this.setMessage('城前から出発。黄色い城で王さまに謁見しよう（Eで話す、Tでステータス）。土の色が変わったら別のエリアだ');
     }
 
     startBgm('field');
@@ -124,12 +148,43 @@ export default class FieldScene extends Phaser.Scene {
       for (let x = 0; x < FIELD_MAP[y].length; x++) {
         const ch = FIELD_MAP[y][x];
         const v = ((x * 7 + y * 13) % 3) * 10 - 10;
-        g.fillStyle(shade(COLORS[ch] ?? 0x000000, v), 1);
+        const region = regionAt(x, y);
+        const ground = ['.', 'T', ':'].includes(ch);
+        const base = ground ? tone(COLORS[ch] ?? 0x000000, region?.tone) : (COLORS[ch] ?? 0x000000);
+        g.fillStyle(shade(base, v), 1);
         g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
         const ax = x * TILE, ay = y * TILE;
-        if (ch === 'C') { g.fillStyle(0xffffff, 1); g.fillRect(ax + 24, ay + 12, 16, 24); }
-        if (ch === 'D') { g.fillStyle(0x000000, 1); g.fillRect(ax + 16, ay + 24, 32, 24); }
-        if (ch === 'V') { g.fillStyle(0x7a3b00, 1); g.fillRect(ax + 20, ay + 20, 24, 20); }
+        const off = (x * 5 + y * 11) % 3;
+        if (ch === '.') {
+          g.fillStyle(shade(tone(COLORS['.'], region?.tone), -25), 1);
+          g.fillRect(ax + 12 + off * 12, ay + 36, 10, 10);
+          // 野花（開放感の小物）
+          if ((x * 3 + y * 7) % 11 === 0) { g.fillStyle(0xfff176, 1); g.fillRect(ax + 30 - off * 8, ay + 14, 6, 6); }
+          if ((x * 5 + y * 3) % 13 === 0) { g.fillStyle(0xffffff, 1); g.fillRect(ax + 44, ay + 46, 5, 5); }
+        }
+        if (ch === 'T') { g.fillStyle(0x1d4d1a, 1); g.fillRect(ax + 14 + off * 8, ay + 16, 20, 24); }
+        if (ch === '~') { g.fillStyle(0x9fc8ff, 1); g.fillRect(ax + 10, ay + 28 + (off % 2) * 12, 40, 4); }
+        if (ch === ':') { g.fillStyle(shade(COLORS[':'], -30), 1); g.fillRect(ax + 20 + off * 8, ay + 40, 8, 8); }
+        if (ch === '+') { g.fillStyle(0x6e3e1c, 1); g.fillRect(ax + 8, ay, 6, TILE - 1); g.fillRect(ax + 50, ay, 6, TILE - 1); }
+        if (ch === '#') { g.fillStyle(0x8a7d6d, 1); g.fillRect(ax + 8, ay + 8, 20, 10); }
+        if (ch === 'C') {
+          // 城：白壁＋赤屋根＋旗
+          g.fillStyle(0xf5f5f5, 1); g.fillRect(ax + 18, ay + 20, 28, 28);
+          g.fillStyle(0xc62828, 1); g.fillTriangle(ax + 14, ay + 20, ax + 32, ay + 4, ax + 50, ay + 20);
+          g.fillStyle(0x333333, 1); g.fillRect(ax + 31, ay + 4, 2, 12);
+          g.fillStyle(0xffeb3b, 1); g.fillRect(ax + 33, ay + 4, 10, 7);
+        }
+        if (ch === 'D') {
+          // 坑口：坑木の枠＋暗い穴
+          g.fillStyle(0x6e3e1c, 1); g.fillRect(ax + 10, ay + 8, 8, 48); g.fillRect(ax + 46, ay + 8, 8, 48);
+          g.fillStyle(0x6e3e1c, 1); g.fillRect(ax + 10, ay + 8, 44, 8);
+          g.fillStyle(0x000000, 1); g.fillRect(ax + 18, ay + 16, 28, 40);
+        }
+        if (ch === 'V') {
+          // 家：壁＋三角屋根
+          g.fillStyle(0xd7a86f, 1); g.fillRect(ax + 16, ay + 26, 32, 22);
+          g.fillStyle(0x8d3b1f, 1); g.fillTriangle(ax + 12, ay + 26, ax + 32, ay + 10, ax + 52, ay + 26);
+        }
       }
     }
     for (const n of DIALOGUES.npcs) {
@@ -181,8 +236,9 @@ export default class FieldScene extends Phaser.Scene {
   refreshStatus() {
     const p = gameState.player;
     const n = Object.keys(p.traits).length;
+    const region = this.currentRegion ? this.currentRegion() : null;
     this.statusText.setText(
-      `Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} EXP${p.exp}/${p.next} G${p.gold} 草${p.herbs} 銅${copperCount()} 特性${n}種 ${gameState.hasOrder && !gameState.bossDefeated ? '★依頼' : ''}`
+      `Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} EXP${p.exp}/${p.next} G${p.gold} 草${p.herbs} 銅${copperCount()} 特性${n}種 ${gameState.hasOrder && !gameState.bossDefeated ? '★王命' : ''}${region ? ' ' + region.id : ''}`
     );
   }
 
@@ -213,30 +269,46 @@ export default class FieldScene extends Phaser.Scene {
 
   tryTalk() {
     if (FIELD_MAP[gameState.py][gameState.px] === 'C') {
-      const stage = foremanStage();
-      const lines = this.foremanLines(stage);
-      this.talk = { name: '親方', lines, idx: 0, choice: null, foremanStage: stage };
+      const stage = kingStage();
+      const lines = this.kingLines(stage);
+      this.talk = { name: '王さま', lines, idx: 0, choice: null, kingStage: stage };
       this.cmdLock = true;
       this.showTalk();
       return;
     }
     const n = this.adjacentNpc();
     if (!n) { this.setMessage('この辺りには 誰もいないようだ。'); return; }
+    if (n.foremanNpc) {
+      const stage = this.foremanFieldStage();
+      const lines = stage === 'ordered'
+        ? [`銅鉱石は${copperCount()}/3個だ。`, '上層坑道の光る岩を Eキーで掘るんだ。']
+        : DIALOGUES.foreman[stage];
+      this.talk = { name: '親方', npc: n, lines, idx: 0, choice: null, foremanStage: stage };
+      this.cmdLock = true;
+      this.showTalk();
+      return;
+    }
     this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
     this.cmdLock = true;
     this.showTalk();
   }
 
-  foremanLines(stage) {
-    if (stage === 'ordered') return [`銅鉱石は${copperCount()}/3個だ。`, '上層坑道の光る岩を Eキーで掘るんだ。'];
-    if (stage === 'first' && loadMeta().loops >= 2) return DIALOGUES.foreman.firstDeja;
+  kingLines(stage) {
+    if (stage === 'first' && loadMeta().loops >= 2) return DIALOGUES.king.firstDeja;
     if (stage === 'clear') {
       const c = loadMeta().clears || 1;
-      if (c >= 3) return DIALOGUES.foreman.clear3;
-      if (c === 2) return DIALOGUES.foreman.clear2;
-      return DIALOGUES.foreman.clear1;
+      if (c >= 3) return DIALOGUES.king.clear3;
+      if (c === 2) return DIALOGUES.king.clear2;
+      return DIALOGUES.king.clear1;
     }
-    return DIALOGUES.foreman[stage];
+    return DIALOGUES.king[stage];
+  }
+
+  foremanFieldStage() {
+    if (!gameState.hasOrder) return 'pre';
+    if (gameState.bossDefeated) return 'clearF';
+    if (gameState.hasKey) return 'key';
+    return 'ordered';
   }
 
   showTalk() {
@@ -322,11 +394,11 @@ export default class FieldScene extends Phaser.Scene {
     if (t.foremanStage === 'ordered' && !gameState.hasKey) {
       if (copperCount() >= 3) {
         t.choice = 'deliver';
-        this.setMessage(`銅鉱石3個を渡すか？（Z=渡す X=やめる）`);
+        this.setMessage('銅鉱石3個を渡すか？（Z=渡す X=やめる）');
         return;
       }
     }
-    if (t.foremanStage === 'clear') {
+    if (t.kingStage === 'clear') {
       t.choice = 'next';
       this.setMessage('次の坑道へ行くか？（Z=行く X=やめる）');
       return;
@@ -344,7 +416,7 @@ export default class FieldScene extends Phaser.Scene {
         p.gold -= t.npc.cost;
         p.hp = p.maxHp;
         jingle('inn');
-        this.setMessage('朝になった！ HPが全回復した！ ── 今日も掘るぞ。');
+        this.setMessage('朝になった！ HPが全回復した！ ── 今日もいい天気だ。');
       }
     } else {
       this.setMessage(`${t.name}「そうか。また寄ってくれ。」`);
@@ -393,7 +465,7 @@ export default class FieldScene extends Phaser.Scene {
         this.setMessage('記録に失敗した…。また試してくれ。');
       }
     } else {
-      this.setMessage(`${t.name}「そうか。ケガには気をつけろ。」`);
+      this.setMessage(`${t.name}「そうか。神のご加護を。」`);
     }
     t.choice = null;
     t.done = true;
@@ -446,9 +518,9 @@ export default class FieldScene extends Phaser.Scene {
     if (yes) {
       startNextLoop();
       jingle('levelup');
-      this.setMessage('新しい坑道の噂だ！ 親方に会いに行こう。');
+      this.setMessage('新しい坑道の噂だ！ 親方…いや王さまに会いに行こう。');
     } else {
-      this.setMessage('親方「そうか。ゆっくり休んでいけ。」');
+      this.setMessage('王さま「そうか。ゆっくり休んでいけ。」');
     }
     this.talk.choice = null;
     this.talk.done = true;
@@ -456,7 +528,7 @@ export default class FieldScene extends Phaser.Scene {
   }
 
   endTalk(t) {
-    if (t.foremanStage === 'first' && !gameState.hasOrder) {
+    if (t.kingStage === 'first' && !gameState.hasOrder) {
       gameState.hasOrder = true;
       jingle('levelup');
     }
@@ -467,6 +539,17 @@ export default class FieldScene extends Phaser.Scene {
 
   passable(ch) { return ['.', 'T', ':', '+', 'C', 'V', 'D', 'S'].includes(ch); }
 
+  // DQ1式：テリトリー（3x3）×地形タイルの危険度の高い方を採用
+  currentRegion() {
+    return regionAt(gameState.px, gameState.py);
+  }
+
+  regionDanger() {
+    const region = this.currentRegion();
+    const ch = FIELD_MAP[gameState.py][gameState.px];
+    return Math.max(regionDanger(region), TILE_DANGER[ch] ?? 1);
+  }
+
   tryMove(dx, dy) {
     const nx = gameState.px + dx, ny = gameState.py + dy;
     if (ny < 0 || nx < 0 || ny >= FIELD_MAP.length || nx >= FIELD_MAP[0].length) return;
@@ -476,29 +559,55 @@ export default class FieldScene extends Phaser.Scene {
     gameState.px = nx; gameState.py = ny;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
     this.drawPlayer();
-    this.onEnterTile(ch);
+    const regionChanged = this.lastRegionId !== this.currentRegion()?.id;
+    this.lastRegionId = this.currentRegion()?.id ?? null;
+    this.onEnterTile(ch, regionChanged);
     this.refreshStatus();
   }
 
-  onEnterTile(ch) {
+  onEnterTile(ch, regionChanged = false) {
     if (ch === 'C') {
-      this.setMessage('親方の小屋だ。Eキーで 親方に会える。');
+      this.setMessage('王の城だ。Eキーで 王さまに謁見できる。');
       return;
     }
     if (ch === 'V') {
       const v = villageAt(gameState.px, gameState.py);
-      this.setMessage(`「${v ? v.name : '施設'}」だ。Eキーで 話しかけられる。`);
+      this.setMessage(`「${v ? v.name : '村'}」だ。Eキーで 村人に話しかけられる。`);
       return;
     }
     if (ch === 'D') {
       if (!gameState.hasOrder) {
-        this.setMessage('坑口…。まだ親方の許可がない。（西の小屋へ）');
+        this.setMessage('北の山の坑口…。まだ王さまに会っていない。（西の城へ）');
         return;
       }
       this.enterDungeon();
       return;
     }
-    // キャンプ内は安全地帯。遭遇なし
+    if (Date.now() < gameState.encounterGraceUntil) return;
+    if (ch === '+') {
+      this.setMessage('橋を渡った！ この先は強い敵が出るぞ！（エリア' + (this.currentRegion()?.id ?? '?') + '）');
+    } else if (regionChanged && !this.cmdLock) {
+      const region = this.currentRegion();
+      if (region) {
+        this.setMessage(`― ${region.name}に入った！${region.lv >= 3 ? ' 強い敵に注意！' : ''}`);
+      }
+    }
+    let rate = ENCOUNTER_RATE[ch] ?? 0;
+    rate = Math.max(0.02, rate * (1 - 0.1 * gameState.player.quick));
+    if (Math.random() < rate) {
+      const region = this.currentRegion();
+      this.enterBattle(ch, this.regionDanger(), region ? region.pool : null);
+    }
+  }
+
+  enterBattle(tile, danger, pool) {
+    this.cmdLock = true;
+    stopBgm();
+    const cam = this.cameras.main;
+    cam.fadeOut(200, 0, 0, 0);
+    cam.once('camerafadeoutcomplete', () => {
+      this.scene.start('battle', { tile, from: 'field', danger: danger ?? this.regionDanger(), pool: pool ?? this.currentRegion()?.pool ?? null });
+    });
   }
 
   enterDungeon() {

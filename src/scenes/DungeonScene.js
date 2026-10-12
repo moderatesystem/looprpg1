@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import DIALOGUES from '../data/dialogues.json';
-import { gameState, takeLegacy } from '../game/state';
+import { gameState, takeLegacy, generateVeins } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
@@ -42,6 +42,9 @@ export default class DungeonScene extends Phaser.Scene {
     }
     if (!gameState.mineMined) gameState.mineMined = {};
     if (!gameState.mineMined[this.floorIdx]) gameState.mineMined[this.floorIdx] = {};
+    if (!gameState.veins || !gameState.veins[0] || !gameState.veins[0].length) {
+      gameState.veins = generateVeins(gameState.seed || 1);
+    }
 
     this.drawMap();
     this.drawHud();
