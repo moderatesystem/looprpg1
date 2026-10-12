@@ -112,13 +112,15 @@ export default class TownScene extends Phaser.Scene {
     const town = this.town();
     const MAP = town.map;
     const stone = town.ground === 'stone';
+    const wallKey = town.id === 'castle' ? 't-castle-wall' : 't-dungeon-wall';
+    const floorKey = town.id === 'castle' ? 't-castle-floor' : 't-dungeon-floor';
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
         const ch = MAP[y][x];
         const cx = x * TILE + TILE / 2, cy = y * TILE + TILE / 2;
         let imgOk = null;
-        if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
-        else if (stone) imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
+        if (ch === '#') imgOk = putTile(this, wallKey, cx, cy, TILE);
+        else if (stone) imgOk = putTile(this, floorKey, cx, cy, TILE);
         else {
           const gk = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
           imgOk = putTile(this, gk, cx, cy, TILE);
@@ -274,7 +276,13 @@ export default class TownScene extends Phaser.Scene {
     for (const [dx, dy] of dirs) {
       const n = this.npcAt(this.tx + dx, this.ty + dy);
       if (n) {
-        this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
+        if (n.king) {
+          const stage = kingStage();
+          const lines = this.kingLines(stage);
+          this.talk = { name: '王さま', lines, idx: 0, choice: null, kingStage: stage };
+        } else {
+          this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
+        }
         this.cmdLock = true;
         this.showTalk();
         return;
