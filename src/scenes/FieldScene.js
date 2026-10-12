@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { FIELD_MAP, findTile } from '../data/fieldMap';
 import DIALOGUES from '../data/dialogues.json';
-import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta, startNextLoop } from '../game/state';
+import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
@@ -66,13 +66,6 @@ function npcLines(npc) {
   return npc.lines;
 }
 
-function kingStage() {
-  if (!gameState.hasOrder) return 'first';
-  if (gameState.bossDefeated) return 'clear';
-  if (gameState.chestOpened) return 'chest';
-  return 'ordered';
-}
-
 function foremanFieldStage() {
   if (!gameState.hasOrder) return 'pre';
   if (gameState.bossDefeated) return 'clearF';
@@ -120,9 +113,13 @@ export default class FieldScene extends Phaser.Scene {
         resetState(s.x, s.y);
       }
     }
-    // セーブ地点が坑道内なら坑道シーンへ直行する
+    // セーブ地点が坑道・町内なら該当シーンへ直行する
     if (gameState.map === 'mine') {
       this.scene.start('dungeon', { floor: gameState.floor || 0, sx: gameState.px, sy: gameState.py });
+      return;
+    }
+    if (gameState.map === 'town' && gameState.townId) {
+      this.scene.start('town', { townId: gameState.townId });
       return;
     }
 
@@ -143,7 +140,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('城前から出発。東の城の黄色い床に乗ってEキーで謁見（Tでステータス）');
+      this.setMessage('城前から出発。城や村に入ってみよう（Eで話す、Tでステータス）');
     }
 
     startBgm('field');
@@ -292,24 +289,8 @@ export default class FieldScene extends Phaser.Scene {
   }
 
   tryTalk() {
-    if (FIELD_MAP[gameState.py][gameState.px] === 'C') {
-      const stage = kingStage();
-      const lines = this.kingLines(stage);
-      this.talk = { name: '王さま', lines, idx: 0, choice: null, kingStage: stage };
-      this.cmdLock = true;
-      this.showTalk();
-      return;
-    }
     const n = this.adjacentNpc();
     if (!n) {
-      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (const [dx, dy] of dirs) {
-        const nx = gameState.px + dx, ny = gameState.py + dy;
-        if (ny >= 0 && nx >= 0 && ny < FIELD_MAP.length && nx < FIELD_MAP[0].length && FIELD_MAP[ny][nx] === 'C') {
-          this.setMessage('城の黄色い床の上で Eキーを押すんだ。');
-          return;
-        }
-      }
       this.setMessage('この辺りには 誰もいないようだ。');
       return;
     }
@@ -326,17 +307,6 @@ export default class FieldScene extends Phaser.Scene {
     this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
     this.cmdLock = true;
     this.showTalk();
-  }
-
-  kingLines(stage) {
-    if (stage === 'first' && loadMeta().loops >= 2) return DIALOGUES.king.firstDeja;
-    if (stage === 'clear') {
-      const c = loadMeta().clears || 1;
-      if (c >= 3) return DIALOGUES.king.clear3;
-      if (c === 2) return DIALOGUES.king.clear2;
-      return DIALOGUES.king.clear1;
-    }
-    return DIALOGUES.king[stage];
   }
 
   foremanFieldStage() {
@@ -383,11 +353,6 @@ export default class FieldScene extends Phaser.Scene {
       if (k === 'x' || k === 'X') return this.chooseDeliver(false);
       return;
     }
-    if (t.choice === 'next') {
-      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseNextLoop(true);
-      if (k === 'x' || k === 'X') return this.chooseNextLoop(false);
-      return;
-    }
     if (!okKeys.includes(k)) return;
     t.idx += 1;
     if (t.idx < t.lines.length) { this.showTalk(); return; }
@@ -432,11 +397,6 @@ export default class FieldScene extends Phaser.Scene {
         this.setMessage('銅鉱石3個を渡すか？（Z=渡す X=やめる）');
         return;
       }
-    }
-    if (t.kingStage === 'clear') {
-      t.choice = 'next';
-      this.setMessage('次の坑道へ行くか？（Z=行く X=やめる）');
-      return;
     }
     this.endTalk(t);
   }
@@ -549,24 +509,7 @@ export default class FieldScene extends Phaser.Scene {
     this.refreshStatus();
   }
 
-  chooseNextLoop(yes) {
-    if (yes) {
-      startNextLoop();
-      jingle('levelup');
-      this.setMessage('新しい坑道の噂だ！ 親方…いや王さまに会いに行こう。');
-    } else {
-      this.setMessage('王さま「そうか。ゆっくり休んでいけ。」');
-    }
-    this.talk.choice = null;
-    this.talk.done = true;
-    this.refreshStatus();
-  }
-
   endTalk(t) {
-    if (t.kingStage === 'first' && !gameState.hasOrder) {
-      gameState.hasOrder = true;
-      jingle('levelup');
-    }
     this.talk = null;
     this.cmdLock = false;
     this.refreshStatus();
@@ -601,13 +544,9 @@ export default class FieldScene extends Phaser.Scene {
   }
 
   onEnterTile(ch, regionChanged = false) {
-    if (ch === 'C') {
-      this.setMessage('王の城だ。黄色い床の上で Eキーで謁見できる。');
-      return;
-    }
-    if (ch === 'V') {
-      const v = villageAt(gameState.px, gameState.py);
-      this.setMessage(`「${v ? v.name : '村'}」だ。Eキーで 村人に話しかけられる。`);
+    const town = (DIALOGUES.towns || []).find((t) => t.fieldX === gameState.px && t.fieldY === gameState.py);
+    if (town && (ch === 'C' || ch === 'V')) {
+      this.enterTown(town.id);
       return;
     }
     if (ch === 'D') {
@@ -642,6 +581,22 @@ export default class FieldScene extends Phaser.Scene {
     cam.fadeOut(200, 0, 0, 0);
     cam.once('camerafadeoutcomplete', () => {
       this.scene.start('battle', { tile, from: 'field', danger: danger ?? this.regionDanger(), pool: pool ?? this.currentRegion()?.pool ?? null });
+    });
+  }
+
+  enterTown(townId) {
+    const town = (DIALOGUES.towns || []).find((t) => t.id === townId);
+    if (!town) return;
+    this.cmdLock = true;
+    stopBgm();
+    gameState.fieldX = gameState.px;
+    gameState.fieldY = gameState.py;
+    gameState.map = 'town';
+    gameState.townId = townId;
+    const cam = this.cameras.main;
+    cam.fadeOut(250, 0, 0, 0);
+    cam.once('camerafadeoutcomplete', () => {
+      this.scene.start('town', { townId, spawn: true });
     });
   }
 

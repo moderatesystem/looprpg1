@@ -64,6 +64,10 @@ export const gameState = {
   weaponBought: false,
   shopBought: {},
   mineMined: {},
+  townId: null,
+  fieldX: 0,
+  fieldY: 0,
+  castleChests: {},
   pendingMsg: null,
   encounterGraceUntil: 0,
   initialized: false,
@@ -92,6 +96,10 @@ export function resetState(sx, sy) {
   gameState.weaponBought = false;
   gameState.shopBought = {};
   gameState.mineMined = {};
+  gameState.townId = null;
+  gameState.fieldX = 0;
+  gameState.fieldY = 0;
+  gameState.castleChests = {};
   gameState.pendingMsg = null;
   gameState.encounterGraceUntil = 0;
   gameState.initialized = true;
@@ -133,6 +141,10 @@ export function saveGame() {
       weaponBought: gameState.weaponBought,
       shopBought: gameState.shopBought,
       mineMined: gameState.mineMined,
+      townId: gameState.townId,
+      fieldX: gameState.fieldX,
+      fieldY: gameState.fieldY,
+      castleChests: gameState.castleChests,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     return true;
@@ -173,6 +185,10 @@ export function loadGame() {
     gameState.weaponBought = !!d.weaponBought;
     gameState.shopBought = d.shopBought || {};
     gameState.mineMined = d.mineMined || {};
+    gameState.townId = d.townId || null;
+    gameState.fieldX = d.fieldX || 0;
+    gameState.fieldY = d.fieldY || 0;
+    gameState.castleChests = d.castleChests || {};
     gameState.pendingMsg = '冒険の記録から再開した！（つづきからスタート）';
     gameState.encounterGraceUntil = Date.now() + 1500;
     gameState.initialized = true;
@@ -227,5 +243,6 @@ export function respawn() {
   gameState.py = CAMP_START.y;
   gameState.map = 'camp';
   gameState.floor = 0;
+  gameState.townId = null;
   gameState.pendingMsg = '門兵「おっと、倒れていたぞ！ 城まで運んでやった。半分のゴールドは治療代だ。再び行くのだ！」';
 }

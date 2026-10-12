@@ -1,0 +1,555 @@
+import Phaser from 'phaser';
+import DIALOGUES from '../data/dialogues.json';
+import { gameState, saveGame, loadMeta, startNextLoop } from '../game/state';
+import { applyTrait } from '../data/traits';
+import { toggleStatus, isStatusOpen } from '../game/statusUi';
+import { startBgm, stopBgm, jingle } from '../game/sound';
+import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
+import { preloadTiles, putTile, tileHash } from '../game/tileArt';
+import { beep, TILE, copperCount } from './FieldScene';
+
+// 町・城マップ（DQ1式の分離マップ）。凡例 #:壁 .:地面 H:家 T:木 K:玉座 B:宝箱 D:出入口
+// 戦闘・採取なし。宿/店/教会/鍛冶/王の玉座を扱う
+export function townById(id) {
+  return (DIALOGUES.towns || []).find((t) => t.id === id) || null;
+}
+
+function npcColor(n) {
+  if (n.inn) return 0xffd54f;
+  if (n.shop) return 0x4fc3f7;
+  if (n.smith) return 0xff6f00;
+  if (n.church) return 0xffffff;
+  if (n.id === 'guard' || n.id === 'guard_in') return 0x7e9bff;
+  return 0xff9800;
+}
+
+function npcLines(npc) {
+  if (gameState.bossDefeated && npc.clear) return npc.clear;
+  if (gameState.hasOrder && npc.mid) return npc.mid;
+  return npc.lines;
+}
+
+function kingStage() {
+  if (!gameState.hasOrder) return 'first';
+  if (gameState.bossDefeated) return 'clear';
+  if (gameState.chestOpened) return 'chest';
+  return 'ordered';
+}
+
+export default class TownScene extends Phaser.Scene {
+  constructor() {
+    super('town');
+  }
+
+  preload() {
+    preloadCharArt(this);
+    preloadTiles(this);
+  }
+
+  town() {
+    return townById(this.townId);
+  }
+
+  create(data) {
+    this.townId = data.townId;
+    const town = this.town();
+    if (!town) {
+      this.scene.start('field');
+      return;
+    }
+    gameState.map = 'town';
+    gameState.townId = this.townId;
+    if (data.spawn) {
+      this.tx = town.spawn.x; this.ty = town.spawn.y;
+      gameState.px = this.tx; gameState.py = this.ty;
+    } else {
+      this.tx = gameState.px; this.ty = gameState.py;
+    }
+
+    this.moveCd = 0;
+    this.cmdLock = false;
+    this.talk = null;
+
+    this.drawTown();
+    this.drawHud();
+
+    const cam = this.cameras.main;
+    const MAP = town.map;
+    cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
+    cam.startFollow(this.follower, true, 1, 1);
+    cam.fadeIn(200, 0, 0, 0);
+    this.setMessage(`「${town.name}」に入った。`);
+
+    startBgm('field');
+    this.events.once('shutdown', stopBgm);
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.keyW = this.input.keyboard.addKey('W');
+    this.keyA = this.input.keyboard.addKey('A');
+    this.keyS = this.input.keyboard.addKey('S');
+    this.keyD = this.input.keyboard.addKey('D');
+    this.input.keyboard.on('keydown', (e) => this.handleKey(e));
+    this.refreshStatus();
+  }
+
+  tileAt(x, y) { return this.town().map[y][x]; }
+
+  npcAt(x, y) {
+    return (this.town().npcs || []).find((n) => n.x === x && n.y === y) || null;
+  }
+
+  drawTown() {
+    if (this.townGfx) this.townGfx.destroy();
+    if (this.markGfx) this.markGfx.destroy();
+    if (this.playerGfx) this.playerGfx.destroy();
+    if (this.follower) this.follower.destroy();
+    if (this.npcImgs) this.npcImgs.forEach((i) => i.destroy());
+    this.npcImgs = [];
+    if (this.tileImgs) this.tileImgs.forEach((i) => i.destroy());
+    this.tileImgs = [];
+    const g = this.add.graphics();
+    this.townGfx = g;
+    const town = this.town();
+    const MAP = town.map;
+    const stone = town.ground === 'stone';
+    for (let y = 0; y < MAP.length; y++) {
+      for (let x = 0; x < MAP[y].length; x++) {
+        const ch = MAP[y][x];
+        const cx = x * TILE + TILE / 2, cy = y * TILE + TILE / 2;
+        let imgOk = null;
+        if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
+        else if (stone) imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
+        else {
+          const gk = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
+          imgOk = putTile(this, gk, cx, cy, TILE);
+          if (imgOk) { const hh = tileHash(x + 101, y + 57); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
+        }
+        if (imgOk) this.tileImgs.push(imgOk);
+        else {
+          if (ch === '#') g.fillStyle(0x3a3a4a, 1);
+          else if (stone) g.fillStyle(0x5a4a3a, 1);
+          else g.fillStyle(0x4a8f3c, 1);
+          g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
+        }
+      }
+    }
+    // マーカー類は前面レイヤー
+    const m = this.add.graphics();
+    this.markGfx = m;
+    for (let y = 0; y < MAP.length; y++) {
+      for (let x = 0; x < MAP[y].length; x++) {
+        const ch = MAP[y][x];
+        const px = x * TILE, py = y * TILE;
+        const cx = px + TILE / 2, cy = py + TILE / 2;
+        if (ch === 'H') {
+          if (!putTile(this, 'p-house', cx, cy, 60)) {
+            m.fillStyle(0x7a3b00, 1); m.fillRect(px + 10, py + 10, 44, 40);
+          }
+        }
+        if (ch === 'T') {
+          if (!putTile(this, 'p-tree', cx, cy, 54)) {
+            m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
+          }
+        }
+        if (ch === 'K') { m.fillStyle(0xd8c23a, 1); m.fillRect(px + 8, py + 8, TILE - 16, TILE - 16); }
+        if (ch === 'B') {
+          const b = (town.chests || []).find((c) => c.x === x && c.y === y);
+          const opened = b && gameState.castleChests[`${this.townId}:${b.id}`];
+          if (!opened) {
+            m.fillStyle(0xd8a03a, 1); m.fillRect(px + 12, py + 16, 40, 32);
+            m.fillStyle(0x000000, 1); m.fillRect(px + 26, py + 28, 12, 8);
+          }
+        }
+        if (ch === 'D') { m.fillStyle(0x6e3e1c, 1); m.fillRect(px + 14, py + 14, TILE - 28, TILE - 28); }
+      }
+    }
+    for (const n of town.npcs || []) {
+      const img = drawNpcFigure(this, n, n.x * TILE, n.y * TILE);
+      if (img) this.npcImgs.push(img);
+      else {
+        const c = npcColor(n);
+        g.fillStyle(c, 1);
+        g.fillRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
+        g.lineStyle(3, 0x000000, 1);
+        g.strokeRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
+      }
+      this.add.text(n.x * TILE + 2, n.y * TILE - 18, n.name, {
+        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
+      });
+    }
+    this.follower = this.add.rectangle(
+      this.tx * TILE + TILE / 2, this.ty * TILE + TILE / 2, 4, 4, 0xffffff, 0
+    );
+    const pg = this.add.graphics();
+    this.playerGfx = pg;
+    this.drawPlayer();
+  }
+
+  drawPlayer() {
+    const pg = this.playerGfx;
+    const px = this.tx * TILE, py = this.ty * TILE;
+    if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
+    pg.clear();
+    pg.fillStyle(0xffffff, 1);
+    pg.fillRect(px + 16, py + 16, 32, 32);
+    pg.lineStyle(3, 0x000000, 1);
+    pg.strokeRect(px + 16, py + 16, 32, 32);
+    pg.fillStyle(0x000000, 1);
+    pg.fillRect(px + 24, py + 22, 6, 10);
+    pg.fillRect(px + 36, py + 22, 6, 10);
+  }
+
+  drawHud() {
+    const g = this.add.graphics().setScrollFactor(0);
+    g.fillStyle(0x000000, 0.85); g.fillRect(0, 0, 800, 30);
+    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setScrollFactor(0);
+    g.fillStyle(0x000000, 1); g.fillRect(0, 490, 800, 110);
+    g.lineStyle(2, 0xffffff, 1); g.strokeRect(0, 490, 800, 110);
+    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 770 } }).setScrollFactor(0);
+  }
+
+  refreshStatus() {
+    const p = gameState.player;
+    const n = Object.keys(p.traits).length;
+    this.statusText.setText(
+      `Lv${p.lv} HP ${p.hp}/${p.maxHp} ATK${p.atk} EXP${p.exp}/${p.next} G${p.gold} 草${p.herbs} 銅${copperCount()} 特性${n}種 ＠${this.town().name}`
+    );
+  }
+
+  setMessage(t) { this.msgText.setText(t); }
+
+  handleKey(e) {
+    if (e.repeat) return;
+    const k = e.key;
+    if (k === 't' || k === 'T') {
+      if (!this.talk && !this.cmdLock) toggleStatus();
+      return;
+    }
+    if (isStatusOpen()) return;
+    if (this.talk) { this.advanceTalk(k); return; }
+    if (this.cmdLock) return;
+    if (k === 'e' || k === 'E' || k === ' ') { this.tryTalk(); return; }
+  }
+
+  adjacentKing() {
+    const MAP = this.town().map;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
+    for (const [dx, dy] of dirs) {
+      const nx = this.tx + dx, ny = this.ty + dy;
+      if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) continue;
+      if (MAP[ny][nx] === 'K') return true;
+    }
+    return false;
+  }
+
+  tryTalk() {
+    if (this.adjacentKing()) {
+      const stage = kingStage();
+      const lines = this.kingLines(stage);
+      this.talk = { name: '王さま', lines, idx: 0, choice: null, kingStage: stage };
+      this.cmdLock = true;
+      this.showTalk();
+      return;
+    }
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
+    for (const [dx, dy] of dirs) {
+      const n = this.npcAt(this.tx + dx, this.ty + dy);
+      if (n) {
+        this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
+        this.cmdLock = true;
+        this.showTalk();
+        return;
+      }
+    }
+    this.setMessage('この辺りには 誰もいないようだ。');
+  }
+
+  kingLines(stage) {
+    if (stage === 'first' && loadMeta().loops >= 2) return DIALOGUES.king.firstDeja;
+    if (stage === 'clear') {
+      const c = loadMeta().clears || 1;
+      if (c >= 3) return DIALOGUES.king.clear3;
+      if (c === 2) return DIALOGUES.king.clear2;
+      return DIALOGUES.king.clear1;
+    }
+    return DIALOGUES.king[stage];
+  }
+
+  showTalk() {
+    const t = this.talk;
+    this.setMessage(`${t.name}「${t.lines[t.idx]}」`);
+  }
+
+  advanceTalk(k) {
+    const t = this.talk;
+    const okKeys = ['z', 'Z', ' ', 'Enter', 'e', 'E'];
+    if (t.done) {
+      if (!okKeys.includes(k) && k !== 'x' && k !== 'X') return;
+      return this.endTalk(t);
+    }
+    if (t.choice === 'inn') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseInn(true);
+      if (k === 'x' || k === 'X') return this.chooseInn(false);
+      return;
+    }
+    if (t.choice === 'shop') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseShop(true);
+      if (k === 'x' || k === 'X') return this.chooseShop(false);
+      return;
+    }
+    if (t.choice === 'church') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseChurch(true);
+      if (k === 'x' || k === 'X') return this.chooseChurch(false);
+      return;
+    }
+    if (t.choice === 'sell-ore') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseSellOre(true);
+      if (k === 'x' || k === 'X') return this.chooseSellOre(false);
+      return;
+    }
+    if (t.choice === 'next') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseNextLoop(true);
+      if (k === 'x' || k === 'X') return this.chooseNextLoop(false);
+      return;
+    }
+    if (!okKeys.includes(k)) return;
+    t.idx += 1;
+    if (t.idx < t.lines.length) { this.showTalk(); return; }
+    if (t.npc && t.npc.inn) {
+      t.choice = 'inn';
+      this.setMessage(`${t.name}「一晩 ${t.npc.cost}Gだ。泊まるか？（Z=はい X=いいえ）」`);
+      return;
+    }
+    if (t.npc && t.npc.shop) {
+      const stock = t.npc.shop.stock || [];
+      const idx = gameState.shopBought[t.npc.id] || 0;
+      const s = stock[idx];
+      if (!s) {
+        this.setMessage(`${t.name}「売り切れだ。また来てくれ。」`);
+        t.done = true;
+        return;
+      }
+      t.choice = 'shop';
+      const effect = s.atk ? `ATK+${s.atk}` : `守備+${s.armor}`;
+      const rest = stock.length - idx - 1 > 0 ? `（残り${stock.length - idx}品）` : '';
+      this.setMessage(`${t.name}「${s.name} ${s.cost}G（${effect}）だ${rest}。買うか？（Z=買う X=やめる）」`);
+      return;
+    }
+    if (t.npc && t.npc.church) {
+      t.choice = 'church';
+      this.setMessage(`${t.name}「おいのり（セーブ）をするか？（Z=する X=やめる）」`);
+      return;
+    }
+    if (t.npc && t.npc.smith) {
+      if (copperCount() <= 0) {
+        this.setMessage(`${t.name}「銅鉱石を持ってないな。上層坑道で掘ってこい。」`);
+        t.done = true;
+        return;
+      }
+      t.choice = 'sell-ore';
+      this.setMessage(`${t.name}「銅${copperCount()}個だな。1個12Gで全部買い取るぜ。（Z=売る X=やめる）」`);
+      return;
+    }
+    if (t.kingStage === 'clear') {
+      t.choice = 'next';
+      this.setMessage('次の坑道へ行くか？（Z=行く X=やめる）');
+      return;
+    }
+    this.endTalk(t);
+  }
+
+  chooseInn(yes) {
+    const t = this.talk;
+    const p = gameState.player;
+    if (yes) {
+      if (p.gold < t.npc.cost) {
+        this.setMessage(`${t.name}「お金が足りないようだ。銅を売って 稼いでくるといい。」`);
+      } else {
+        p.gold -= t.npc.cost;
+        p.hp = p.maxHp;
+        jingle('inn');
+        this.setMessage('朝になった！ HPが全回復した！ ── 今日もいい天気だ。');
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。また寄ってくれ。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseShop(yes) {
+    const t = this.talk;
+    const p = gameState.player;
+    const stock = t.npc.shop.stock || [];
+    const idx = gameState.shopBought[t.npc.id] || 0;
+    const s = stock[idx];
+    if (!s) {
+      this.setMessage(`${t.name}「売り切れだよ。」`);
+    } else if (yes) {
+      if (p.gold < s.cost) {
+        this.setMessage(`${t.name}「お金が足りないな。${s.cost}Gだ。」`);
+      } else {
+        p.gold -= s.cost;
+        if (s.atk) p.atk += s.atk;
+        if (s.armor) p.armor += s.armor;
+        gameState.shopBought[t.npc.id] = idx + 1;
+        if (t.npc.id === 'shop1' && idx === 0) gameState.weaponBought = true;
+        jingle('shop');
+        const effect = s.atk ? `ATK+${s.atk}` : `守備+${s.armor}`;
+        this.setMessage(`「${s.name}」を買った！ ${effect}！`);
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。また来てくれ。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseChurch(yes) {
+    const t = this.talk;
+    if (yes) {
+      if (saveGame()) {
+        jingle('pray');
+        this.setMessage('冒険の記録を残した！（セーブ完了）坑道の中でも再開できる。');
+      } else {
+        this.setMessage('記録に失敗した…。また試してくれ。');
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。神のご加護を。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseSellOre(yes) {
+    const t = this.talk;
+    const p = gameState.player;
+    if (yes) {
+      const n = copperCount();
+      if (n <= 0) {
+        this.setMessage(`${t.name}「持ってないな。」`);
+      } else {
+        p.mats.copper = 0;
+        const gain = n * 12;
+        p.gold += gain;
+        jingle('shop');
+        this.setMessage(`銅${n}個を売った！ ${gain}G手に入れた！`);
+      }
+    } else {
+      this.setMessage(`${t.name}「そうか。また持ってこい。」`);
+    }
+    t.choice = null;
+    t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseNextLoop(yes) {
+    if (yes) {
+      startNextLoop();
+      jingle('levelup');
+      this.scene.start('field');
+      return;
+    }
+    this.setMessage('王さま「そうか。ゆっくり休んでいけ。」');
+    this.talk.choice = null;
+    this.talk.done = true;
+    this.refreshStatus();
+  }
+
+  endTalk(t) {
+    if (t.kingStage === 'first' && !gameState.hasOrder) {
+      gameState.hasOrder = true;
+      jingle('levelup');
+    }
+    this.talk = null;
+    this.cmdLock = false;
+    this.refreshStatus();
+  }
+
+  passable(ch) { return ['.', 'T', 'D', 'K', 'B'].includes(ch); }
+
+  tryMove(dx, dy) {
+    const MAP = this.town().map;
+    const nx = this.tx + dx, ny = this.ty + dy;
+    if (ny < 0 || nx < 0 || ny >= MAP.length || nx >= MAP[0].length) return;
+    if (this.npcAt(nx, ny)) { beep(120, 60); return; }
+    const ch = MAP[ny][nx];
+    if (!this.passable(ch)) { beep(120, 60); return; }
+    this.tx = nx; this.ty = ny;
+    gameState.px = nx; gameState.py = ny;
+    this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
+    this.drawPlayer();
+    beep(660, 30);
+    this.onEnterTile(ch);
+    this.refreshStatus();
+  }
+
+  onEnterTile(ch) {
+    if (ch === 'D') {
+      this.exitTown();
+      return;
+    }
+    if (ch === 'B') {
+      this.openTownChest();
+      return;
+    }
+  }
+
+  openTownChest() {
+    const town = this.town();
+    const b = (town.chests || []).find((c) => c.x === this.tx && c.y === this.ty);
+    if (!b) return;
+    const key = `${this.townId}:${b.id}`;
+    if (gameState.castleChests[key]) {
+      this.setMessage('空っぽの宝箱だ。');
+      return;
+    }
+    gameState.castleChests[key] = true;
+    const p = gameState.player;
+    p.gold += b.gold || 0;
+    p.herbs += b.herbs || 0;
+    let msg = `宝箱を開けた！${b.gold ? ` ${b.gold}G` : ''}${b.herbs ? ` やくそう${b.herbs}個` : ''}を手に入れた！`;
+    if (b.trait) {
+      const got = applyTrait(p, b.trait);
+      if (got) msg += ` さらに「${got.name}」の力を得た！`;
+    }
+    jingle('chest');
+    this.setMessage(msg);
+    this.drawTown();
+    this.refreshStatus();
+  }
+
+  exitTown() {
+    this.cmdLock = true;
+    stopBgm();
+    gameState.px = gameState.fieldX;
+    gameState.py = gameState.fieldY;
+    gameState.map = 'camp';
+    gameState.townId = null;
+    gameState.encounterGraceUntil = Date.now() + 1500;
+    const cam = this.cameras.main;
+    cam.fadeOut(250, 0, 0, 0);
+    cam.once('camerafadeoutcomplete', () => {
+      this.scene.start('field');
+    });
+  }
+
+  update(time, delta) {
+    if (this.cmdLock || isStatusOpen()) return;
+    this.moveCd -= delta;
+    if (this.moveCd > 0) return;
+    const keys = this.cursors;
+    let dx = 0, dy = 0;
+    if (keys.left.isDown || this.keyA.isDown) dx = -1;
+    else if (keys.right.isDown || this.keyD.isDown) dx = 1;
+    else if (keys.up.isDown || this.keyW.isDown) dy = -1;
+    else if (keys.down.isDown || this.keyS.isDown) dy = 1;
+    if (dx !== 0 || dy !== 0) {
+      this.tryMove(dx, dy);
+      this.moveCd = 150;
+    }
+  }
+}

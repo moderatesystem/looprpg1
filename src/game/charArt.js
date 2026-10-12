@@ -11,7 +11,11 @@ export function npcKey(id) {
 export function preloadCharArt(scene) {
   scene.load.on('loaderror', () => { /* 素材なしでも続行 */ });
   scene.load.image('hero', 'assets/hero.png');
-  for (const n of DIALOGUES.npcs) {
+  const all = [...DIALOGUES.npcs];
+  for (const t of DIALOGUES.towns || []) {
+    for (const n of t.npcs || []) all.push(n);
+  }
+  for (const n of all) {
     scene.load.image(npcKey(n.id), `assets/npcs/${n.id}.png`);
   }
 }
