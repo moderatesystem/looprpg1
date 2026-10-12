@@ -5,7 +5,7 @@ import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta, startNext
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
-import { preloadTiles, putTile } from '../game/tileArt';
+import { preloadTiles, putTile, tileHash } from '../game/tileArt';
 import { regionAt, regionDanger } from '../data/regions';
 
 export const TILE = 64;
@@ -97,8 +97,12 @@ export default class FieldScene extends Phaser.Scene {
     else if (ch === '~') baseKey = 't-water';
     else if (ch === ':') baseKey = 't-sand';
     else if (ch === '+') baseKey = 't-bridge';
-    else baseKey = ((x * 7 + y * 13) % 2 === 0) ? 't-grass-a' : 't-grass-b';
-    if (!putTile(this, baseKey, cx, cy, TILE)) return false;
+    else baseKey = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
+    const baseImg = putTile(this, baseKey, cx, cy, TILE);
+    if (!baseImg) return false;
+    // 同一テクスチャの繰り返し感を消すため反転を分散させる
+    const h = tileHash(x + 101, y + 57);
+    baseImg.setFlip(h % 2 === 0, h % 3 === 0);
     if (ch === 'T') putTile(this, 'p-tree', cx, cy, 54);
     else if (ch === 'C') putTile(this, 'p-castle', cx, cy - 6, 92);
     else if (ch === 'V') putTile(this, 'p-house', cx, cy, 60);
@@ -132,7 +136,7 @@ export default class FieldScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, FIELD_MAP[0].length * TILE, FIELD_MAP.length * TILE);
-    cam.startFollow(this.follower, false, 0.15, 0.15);
+    cam.startFollow(this.follower, true, 1, 1);
     cam.fadeIn(200, 0, 0, 0);
 
     if (st.pendingMsg) {
@@ -174,7 +178,7 @@ export default class FieldScene extends Phaser.Scene {
         g.fillStyle(shade(base, v), 1);
         g.fillRect(x * TILE, y * TILE, TILE - 1, TILE - 1);
         const ax = x * TILE, ay = y * TILE;
-        const off = (x * 5 + y * 11) % 3;
+        const off = tileHash(x, y) % 3;
         if (ch === '.') {
           g.fillStyle(shade(tone(COLORS['.'], region?.tone), -25), 1);
           g.fillRect(ax + 12 + off * 12, ay + 36, 10, 10);

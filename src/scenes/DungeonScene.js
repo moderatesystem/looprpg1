@@ -5,7 +5,7 @@ import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
-import { preloadTiles, putTile } from '../game/tileArt';
+import { preloadTiles, putTile, tileHash } from '../game/tileArt';
 import { beep, TILE, copperCount } from './FieldScene';
 
 // 坑道（複層）。凡例 #:壁 .:床 S:入口（キャンプに戻る） H:宝箱 B:ボス床
@@ -52,7 +52,7 @@ export default class DungeonScene extends Phaser.Scene {
     this.drawHud();
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
-    cam.startFollow(this.follower, false, 0.15, 0.15);
+    cam.startFollow(this.follower, true, 1, 1);
     cam.fadeIn(250, 0, 0, 0);
     this.setMessage(`「${this.floorCfg().name}」にもぐった。光る岩は隣でEキーだ`);
     startBgm('dungeon');
@@ -111,9 +111,10 @@ export default class DungeonScene extends Phaser.Scene {
         const ch = MAP[y][x];
         const px = x * TILE, py = y * TILE;
         const cx = px + TILE / 2, cy = py + TILE / 2;
-        let imgOk = false;
+        let imgOk = null;
         if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
         else imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
+        if (imgOk && ch !== '#') { const hh = tileHash(x + 31, y + 17); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
         if (!imgOk) {
           if (ch === '#') g.fillStyle(0x3a3a4a, 1);
           else g.fillStyle(0x5a4a3a, 1);

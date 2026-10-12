@@ -23,10 +23,17 @@ export function preloadTiles(scene) {
   }
 }
 
-// 画像があれば描画してtrue、なければfalse（呼び出し側で矩形描画する）
+// 斜め縞を出さない整数ハッシュ（x*a+y*b の線形和は斜め模様になるため）
+export function tileHash(x, y) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+// 画像があれば描画して画像を返す、なければnull（呼び出し側で矩形描画する）
 export function putTile(scene, key, cx, cy, size) {
-  if (!scene.textures.exists(key)) return false;
+  if (!scene.textures.exists(key)) return null;
   const img = scene.add.image(cx, cy, key);
   img.setDisplaySize(size, size);
-  return true;
+  return img;
 }
