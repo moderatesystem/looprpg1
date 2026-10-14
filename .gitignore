@@ -1,3 +1,6 @@
 node_modules/
 dist/
 server.log
+# 第三者著作物の参考画像（研究用・再配布不可のためコミット対象外）
+docs/ref/dq1/*.jpg
+docs/ref/dq1/*.png
