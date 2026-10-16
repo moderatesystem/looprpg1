@@ -142,7 +142,7 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage(st.pendingMsg);
       st.pendingMsg = null;
     } else {
-      this.setMessage('城前から出発。城や村に入ってみよう（Eで話す、Tでステータス）');
+      this.setMessage('北東の空を見よ。黒い山脈だ。城や村に入ってみよう（Eで話す、Tでステータス）');
     }
 
     startBgm('field');
@@ -597,7 +597,7 @@ export default class FieldScene extends Phaser.Scene {
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
     if (ch === '+') {
-      this.setMessage('橋を渡った！ この先は強い敵が出るぞ！（エリア' + (this.currentRegion()?.id ?? '?') + '）');
+      this.setMessage('橋を渡った！ 強い敵が出るぞ！ 引き返せるうちに戻るのも手だ');
     } else if (regionChanged && !this.cmdLock) {
       const region = this.currentRegion();
       if (region) {

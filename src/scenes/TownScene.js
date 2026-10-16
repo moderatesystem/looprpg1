@@ -534,6 +534,7 @@ export default class TownScene extends Phaser.Scene {
   endTalk(t) {
     if (t.kingStage === 'first' && !gameState.hasOrder) {
       gameState.hasOrder = true;
+      gameState.player.herbs += 1;
       jingle('levelup');
     }
     this.talk = null;
