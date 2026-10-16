@@ -20,6 +20,9 @@ const FILES = {
   'p-sign': 'assets/props/sign.png',
   'p-throne': 'assets/props/throne.png',
   'p-fountain': 'assets/props/fountain.png',
+  'b-field': 'assets/battle/field.png',
+  'b-forest': 'assets/battle/forest.png',
+  'b-cave': 'assets/battle/cave.png',
 };
 
 export function preloadTiles(scene) {

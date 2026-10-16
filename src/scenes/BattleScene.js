@@ -3,6 +3,7 @@ import { makeEnemy, makeBoss } from '../data/enemies';
 import { expForLevel, rollTraitChoices, applyTrait, traitLabel, LEVEL_CAP } from '../data/traits';
 import { gameState, respawn, loadMeta, saveMeta, writeLegacy } from '../game/state';
 import { preloadEnemyArt, drawEnemyArt } from '../game/enemyArt';
+import { preloadTiles, putTile } from '../game/tileArt';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, beep, jingle } from '../game/sound';
 
@@ -16,6 +17,14 @@ export default class BattleScene extends Phaser.Scene {
 
   preload() {
     preloadEnemyArt(this);
+    preloadTiles(this);
+  }
+
+  // 立ち位置の地形と一致する背景画（DQ1式）。なければ従来のツートン
+  vistaKey() {
+    if (this.returnTo === 'dungeon') return 'b-cave';
+    if (this.tile === 'T') return 'b-forest';
+    return 'b-field';
   }
 
   create(data) {
@@ -24,6 +33,7 @@ export default class BattleScene extends Phaser.Scene {
     this.returnTo = data.from || 'field';
     this.returnFloor = data.floor || 0;
     this.returnPos = (data.sx != null && data.sy != null) ? { x: data.sx, y: data.sy } : null;
+    this.tile = data.tile || '.';
     this.focusCount = 0;
     this.msgQueue = [];
     this.msgBusy = false;
@@ -48,9 +58,14 @@ export default class BattleScene extends Phaser.Scene {
 
   drawScreen() {
     const g = this.add.graphics();
-    g.fillStyle(0x101040, 1); g.fillRect(0, 0, 800, 330);
-    g.fillStyle(0x082008, 1); g.fillRect(0, 330, 800, 60);
-    g.lineStyle(2, 0xffffff, 1); g.strokeRect(230, 40, 340, 250);
+    if (this.textures.exists(this.vistaKey())) {
+      const v = this.add.image(400, 195, this.vistaKey());
+      v.setCrop(0, 262, 1024, 500);
+      v.setDisplaySize(800, 390);
+    } else {
+      g.fillStyle(0x101040, 1); g.fillRect(0, 0, 800, 330);
+      g.fillStyle(0x082008, 1); g.fillRect(0, 330, 800, 60);
+    }
     drawEnemyArt(this, this.enemy, 400, 165);
     this.enemyText = this.add.text(240, 50, '', { fontSize: '16px', color: '#ff0', fontFamily: 'monospace' });
     this.statusText = this.add.text(12, 8, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' });
