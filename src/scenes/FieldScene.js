@@ -14,12 +14,12 @@ export { beep } from '../game/sound';
 const COLORS = {
   '#': 0x6b6259, '.': 0x4a8f3c, T: 0x2f6b2a, '~': 0x3a6fd8,
   C: 0xd8c23a, V: 0xb0722e, D: 0x5b2a86, S: 0x4a8f3c,
-  '+': 0x9c5a2a, ':': 0xe0c070,
+  '+': 0x9c5a2a, ':': 0xe0c070, M: 0x2a1a3a,
 };
 
 // DQ1式の地形別遭遇率（草原=低、森・砂浜・橋=中）。橋は出現率ではなく
 // 「渡った先が強い」で警告するゲート扱いにする
-const TILE_DANGER = { '.': 1, T: 1.1, ':': 1.3, '+': 1.6, S: 1, C: 1, V: 1, D: 1 };
+const TILE_DANGER = { '.': 1, T: 1.1, ':': 1.3, '+': 2.0, S: 1, C: 1, V: 1, D: 1 };
 const ENCOUNTER_RATE = { '.': 0.06, T: 0.12, ':': 0.12, '+': 0.12 };
 
 function npcColor(n) {
@@ -90,15 +90,17 @@ export default class FieldScene extends Phaser.Scene {
     else if (ch === '~') baseKey = 't-water';
     else if (ch === ':') baseKey = 't-sand';
     else if (ch === '+') baseKey = 't-bridge';
+    else if (ch === 'M') baseKey = 't-demon';
     else baseKey = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
     const baseImg = putTile(this, baseKey, cx, cy, TILE);
     if (!baseImg) return false;
+    if (ch === '~') this.waterImgs.push(baseImg);
     // 同一テクスチャの繰り返し感を消すため反転を分散させる
     const h = tileHash(x + 101, y + 57);
     baseImg.setFlip(h % 2 === 0, h % 3 === 0);
     if (ch === 'T') putTile(this, 'p-tree', cx, cy, 54);
-    else if (ch === 'C') putTile(this, 'p-castle', cx, cy - 6, 92);
-    else if (ch === 'V') putTile(this, 'p-house', cx, cy, 60);
+    else if (ch === 'C') putTile(this, 'p-castle', cx, cy - 6, 84);
+    else if (ch === 'V') putTile(this, 'p-house', cx, cy, 84);
     else if (ch === 'D') putTile(this, 'p-mine', cx, cy, TILE);
     return true;
   }
@@ -161,6 +163,7 @@ export default class FieldScene extends Phaser.Scene {
     if (this.follower) this.follower.destroy();
     if (this.npcImgs) this.npcImgs.forEach((i) => i.destroy());
     this.npcImgs = [];
+    this.waterImgs = [];
     const g = this.add.graphics();
     this.fieldGfx = g;
     for (let y = 0; y < FIELD_MAP.length; y++) {
@@ -220,7 +223,7 @@ export default class FieldScene extends Phaser.Scene {
         g.strokeRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
       }
       this.add.text(n.x * TILE + 2, n.y * TILE - 18, n.name, {
-        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: 'monospace',
+        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: "'DotGothic16', monospace",
       });
     }
     this.follower = this.add.rectangle(
@@ -229,6 +232,9 @@ export default class FieldScene extends Phaser.Scene {
     const pg = this.add.graphics();
     this.playerGfx = pg;
     this.drawPlayer();
+    if (this.waterImgs.length) {
+      this.tweens.add({ targets: this.waterImgs, alpha: 0.82, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
   }
 
   drawPlayer() {
@@ -248,10 +254,10 @@ export default class FieldScene extends Phaser.Scene {
   drawHud() {
     const g = this.add.graphics().setScrollFactor(0);
     g.fillStyle(0x000000, 0.85); g.fillRect(0, 0, 800, 30);
-    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setScrollFactor(0);
+    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: "'DotGothic16', monospace" }).setScrollFactor(0);
     g.fillStyle(0x000000, 1); g.fillRect(0, 490, 800, 110);
     g.lineStyle(2, 0xffffff, 1); g.strokeRect(0, 490, 800, 110);
-    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 770 } }).setScrollFactor(0);
+    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: "'DotGothic16', monospace", wordWrap: { width: 770 } }).setScrollFactor(0);
   }
 
   refreshStatus() {
@@ -348,6 +354,11 @@ export default class FieldScene extends Phaser.Scene {
       if (k === 'x' || k === 'X') return this.chooseSellOre(false);
       return;
     }
+    if (t.choice === 'herb') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseHerb(true);
+      if (k === 'x' || k === 'X') return this.chooseHerb(false);
+      return;
+    }
     if (t.choice === 'deliver') {
       if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseDeliver(true);
       if (k === 'x' || k === 'X') return this.chooseDeliver(false);
@@ -389,6 +400,11 @@ export default class FieldScene extends Phaser.Scene {
       }
       t.choice = 'sell-ore';
       this.setMessage(`${t.name}「銅${copperCount()}個だな。1個12Gで全部買い取るぜ。（Z=売る X=やめる）」`);
+      return;
+    }
+    if (t.npc && t.npc.toolshop) {
+      t.choice = 'herb';
+      this.setMessage(`${t.name}「やくそう10Gだ。買うか？（Z=1個買う X=やめる）」`);
       return;
     }
     if (t.foremanStage === 'ordered' && !gameState.hasKey) {
@@ -486,6 +502,28 @@ export default class FieldScene extends Phaser.Scene {
     }
     t.choice = null;
     t.done = true;
+    this.refreshStatus();
+  }
+
+  chooseHerb(yes) {
+    const t = this.talk;
+    const p = gameState.player;
+    if (!yes) {
+      this.setMessage(`${t.name}「そうか。また来てくれ。」`);
+      t.choice = null;
+      t.done = true;
+      this.refreshStatus();
+      return;
+    }
+    if (p.gold < 10) {
+      this.setMessage(`${t.name}「お金が足りないな。10Gだ。」`);
+      this.refreshStatus();
+      return;
+    }
+    p.gold -= 10;
+    p.herbs += 1;
+    beep(700, 80);
+    this.setMessage(`やくそうを買った！（残り${p.herbs}個・G${p.gold}）続けてどうぞ（X=やめる）`);
     this.refreshStatus();
   }
 

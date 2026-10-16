@@ -12,6 +12,7 @@ const FILES = {
   't-dungeon-wall': 'assets/tiles/dungeon_wall.png',
   't-castle-floor': 'assets/tiles/castle_floor.png',
   't-castle-wall': 'assets/tiles/castle_wall.png',
+  't-demon': 'assets/tiles/demon.png',
   'p-tree': 'assets/props/tree.png',
   'p-castle': 'assets/props/castle.png',
   'p-house': 'assets/props/house.png',

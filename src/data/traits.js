@@ -50,7 +50,7 @@ export function basePlayer() {
     lv: 1,
     exp: 0,
     next: 12,
-    atk: 8,
+    atk: 7,
     maxHp: 30,
     hp: 30,
     armor: 0,

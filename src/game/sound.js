@@ -51,9 +51,9 @@ export function jingle(name) {
 }
 
 const BGMS = {
-  field: { step: 230, notes: [392, 523, 587, 523, 659, 587, 523, 440] },
-  battle: { step: 175, notes: [196, 196, 262, 196, 175, 175, 220, 196] },
-  dungeon: { step: 320, notes: [110, 0, 131, 0, 98, 0, 147, 0] },
+  field: { step: 300, notes: [392, 0, 523, 0, 587, 0, 523, 0] },
+  battle: { step: 220, notes: [196, 0, 262, 0, 175, 0, 220, 0] },
+  dungeon: { step: 420, notes: [110, 0, 0, 131, 0, 0, 98, 0] },
 };
 
 export function startBgm(kind) {
@@ -65,7 +65,7 @@ export function startBgm(kind) {
     bgmTimer = setInterval(() => {
       const f = bgm.notes[bgmStep % bgm.notes.length];
       bgmStep += 1;
-      if (f > 0) beep(f, bgm.step * 0.9, 'triangle', 0.016);
+      if (f > 0) beep(f, bgm.step * 0.9, 'triangle', 0.010);
     }, bgm.step);
   } catch (e) { /* 音なしでも続行 */ }
 }

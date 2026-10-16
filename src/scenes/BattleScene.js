@@ -67,14 +67,14 @@ export default class BattleScene extends Phaser.Scene {
       g.fillStyle(0x082008, 1); g.fillRect(0, 330, 800, 60);
     }
     drawEnemyArt(this, this.enemy, 400, 165);
-    this.enemyText = this.add.text(240, 50, '', { fontSize: '16px', color: '#ff0', fontFamily: 'monospace' });
-    this.statusText = this.add.text(12, 8, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' });
+    this.enemyText = this.add.text(240, 50, '', { fontSize: '16px', color: '#ff0', fontFamily: "'DotGothic16', monospace" });
+    this.statusText = this.add.text(12, 8, '', { fontSize: '14px', color: '#fff', fontFamily: "'DotGothic16', monospace" });
     g.fillStyle(0x000000, 1); g.fillRect(0, 390, 800, 210);
     g.lineStyle(2, 0xffffff, 1); g.strokeRect(0, 390, 800, 210);
-    this.msgText = this.add.text(16, 404, '', { fontSize: '17px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 500 } });
+    this.msgText = this.add.text(16, 404, '', { fontSize: '17px', color: '#fff', fontFamily: "'DotGothic16', monospace", wordWrap: { width: 500 } });
     g.fillStyle(0x000000, 1); g.fillRect(560, 390, 240, 210);
     g.lineStyle(2, 0xffffff, 1); g.strokeRect(560, 390, 240, 210);
-    this.cmdText = this.add.text(580, 410, '', { fontSize: '20px', color: '#fff', fontFamily: 'monospace', lineSpacing: 10 });
+    this.cmdText = this.add.text(580, 410, '', { fontSize: '20px', color: '#fff', fontFamily: "'DotGothic16', monospace", lineSpacing: 10 });
     this.refresh();
   }
 
@@ -150,6 +150,7 @@ export default class BattleScene extends Phaser.Scene {
       let dmg = Math.floor(p.atk * (1 + p.berserkAtk)) + this.randInt(-2, vmax);
       if (isCrit) dmg = Math.floor(dmg * 1.8);
       dmg = Math.max(1, dmg);
+      if (this.enemy.hardBody) dmg = isCrit ? 2 : 1;
       total += dmg;
       this.enemy.hp -= dmg;
       if (p.lifesteal > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(dmg * p.lifesteal));
@@ -224,6 +225,11 @@ export default class BattleScene extends Phaser.Scene {
     const p = gameState.player;
     const e = this.enemy;
     if (e.hp <= 0) return;
+    if (e.shy && Math.random() < 0.3) {
+      this.say(`${e.name}は にげだした！`, () => this.backToOrigin());
+      this.refresh();
+      return;
+    }
     if (Math.random() < p.evadeChance) {
       this.say('しかし 勇者はかわした！');
       this.refresh();
@@ -289,9 +295,9 @@ export default class BattleScene extends Phaser.Scene {
       p.next = expForLevel(p.lv);
       const h = 6 + p.growthHp;
       p.maxHp += h;
-      p.atk += 2;
+      p.atk += 1;
       gainHp += h;
-      gainAtk += 2;
+      gainAtk += 1;
       ups += 1;
     }
     // LvUP時は半分回復（宿屋の価値を残す）
