@@ -185,10 +185,10 @@ export default class DungeonScene extends Phaser.Scene {
   drawHud() {
     const g = this.add.graphics().setScrollFactor(0);
     g.fillStyle(0x000000, 0.85); g.fillRect(0, 0, 800, 30);
-    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setScrollFactor(0);
+    this.statusText = this.add.text(8, 6, '', { fontSize: '14px', color: '#fff', fontFamily: "'DotGothic16', monospace" }).setScrollFactor(0);
     g.fillStyle(0x000000, 1); g.fillRect(0, 490, 800, 110);
     g.lineStyle(2, 0xffffff, 1); g.strokeRect(0, 490, 800, 110);
-    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: 'monospace', wordWrap: { width: 770 } }).setScrollFactor(0);
+    this.msgText = this.add.text(12, 500, '', { fontSize: '15px', color: '#fff', fontFamily: "'DotGothic16', monospace", wordWrap: { width: 770 } }).setScrollFactor(0);
   }
 
   refreshStatus() {
