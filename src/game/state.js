@@ -64,6 +64,7 @@ export const gameState = {
   weaponBought: false,
   shopBought: {},
   mineMined: {},
+  gateOpen: false,
   townId: null,
   fieldX: 0,
   fieldY: 0,
@@ -96,6 +97,7 @@ export function resetState(sx, sy) {
   gameState.weaponBought = false;
   gameState.shopBought = {};
   gameState.mineMined = {};
+  gameState.gateOpen = false;
   gameState.townId = null;
   gameState.fieldX = 0;
   gameState.fieldY = 0;
@@ -141,6 +143,7 @@ export function saveGame() {
       weaponBought: gameState.weaponBought,
       shopBought: gameState.shopBought,
       mineMined: gameState.mineMined,
+      gateOpen: gameState.gateOpen,
       townId: gameState.townId,
       fieldX: gameState.fieldX,
       fieldY: gameState.fieldY,
@@ -185,6 +188,7 @@ export function loadGame() {
     gameState.weaponBought = !!d.weaponBought;
     gameState.shopBought = d.shopBought || {};
     gameState.mineMined = d.mineMined || {};
+    gameState.gateOpen = !!d.gateOpen;
     gameState.townId = d.townId || null;
     gameState.fieldX = d.fieldX || 0;
     gameState.fieldY = d.fieldY || 0;
