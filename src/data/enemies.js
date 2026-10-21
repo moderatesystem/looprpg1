@@ -1,5 +1,5 @@
 // 敵定義＋生成（フィールド地形・プレイヤーLvでスケーリング）
-const TABLE = [
+export const TABLE = [
   { id: 'slime', name: 'スライム', hp: 14, atk: 6, exp: 5, gold: 5, color: 0x3aa0ff, minLv: 1 },
   { id: 'bat', name: 'コウモリ', hp: 10, atk: 7, exp: 8, gold: 7, color: 0x9a6bff, minLv: 1 },
   { id: 'slimebes', name: 'スライムベス', hp: 15, atk: 6, exp: 6, gold: 8, color: 0xff5252, minLv: 1 },

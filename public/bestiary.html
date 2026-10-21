@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>モンスターずかん - Loop RPG</title>
+<style>
+  body { background: #101040; color: #fff; font-family: monospace; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; border: 3px solid #fff; display: inline-block; padding: 6px 14px; background: #000; }
+  .meta { color: #ff0; font-size: 13px; margin: 8px 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .card { background: #000; border: 3px solid #fff; padding: 10px; text-align: center; }
+  .card.boss { border-color: #f00; }
+  .card img { width: 96px; height: 96px; object-fit: contain; image-rendering: pixelated; background: #082008; }
+  .name { color: #ff0; font-size: 16px; margin: 6px 0; }
+  .stat { font-size: 13px; }
+  .area { font-size: 12px; color: #8fd3ff; margin-top: 4px; }
+  .sp { font-size: 12px; color: #ffa; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>モンスターずかん（全15種）</h1>
+<div class="meta">数値は素の値（Lv補正前）。出現域はテリトリーID＋坑道。画像は透過PNG（なければ矩形表示）</div>
+<div class="grid">
+<div class="card">
+    <img src="assets/enemies/slime.png" alt="スライム" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">スライム</div>
+    <div class="stat">HP 14 ／ ATK 6</div>
+    <div class="stat">EXP 5 ／ G 5</div>
+    <div class="stat">出現Lv 1</div>
+    <div class="area">A1(Lv1)・A2(Lv2)・B1(Lv1)・B2(Lv0)・上層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/bat.png" alt="コウモリ" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">コウモリ</div>
+    <div class="stat">HP 10 ／ ATK 7</div>
+    <div class="stat">EXP 8 ／ G 7</div>
+    <div class="stat">出現Lv 1</div>
+    <div class="area">A1(Lv1)・A2(Lv2)・B1(Lv1)・B2(Lv0)・C1(Lv2)・C2(Lv2)・上層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/slimebes.png" alt="スライムベス" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">スライムベス</div>
+    <div class="stat">HP 15 ／ ATK 6</div>
+    <div class="stat">EXP 6 ／ G 8</div>
+    <div class="stat">出現Lv 1</div>
+    <div class="area">A1(Lv1)・B1(Lv1)</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/dracky.png" alt="ドラキー" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">ドラキー</div>
+    <div class="stat">HP 12 ／ ATK 8</div>
+    <div class="stat">EXP 9 ／ G 11</div>
+    <div class="stat">出現Lv 2</div>
+    <div class="area">B3(Lv4)</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/goblin.png" alt="ゴブリン" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">ゴブリン</div>
+    <div class="stat">HP 18 ／ ATK 8</div>
+    <div class="stat">EXP 11 ／ G 10</div>
+    <div class="stat">出現Lv 2</div>
+    <div class="area">A1(Lv1)・A2(Lv2)・B1(Lv1)・B2(Lv0)・B3(Lv4)・C1(Lv2)・C2(Lv2)・C3(Lv3)・上層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/wolf.png" alt="オオカミ" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">オオカミ</div>
+    <div class="stat">HP 14 ／ ATK 7</div>
+    <div class="stat">EXP 9 ／ G 8</div>
+    <div class="stat">出現Lv 2</div>
+    <div class="area">A2(Lv2)・B1(Lv1)・B3(Lv4)・C1(Lv2)・C2(Lv2)・C3(Lv3)・上層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/ghost.png" alt="ゴースト" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">ゴースト</div>
+    <div class="stat">HP 20 ／ ATK 10</div>
+    <div class="stat">EXP 15 ／ G 13</div>
+    <div class="stat">出現Lv 3</div>
+    <div class="area">A2(Lv2)・B3(Lv4)・C1(Lv2)・C2(Lv2)・C3(Lv3)・上層坑道・下層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/skeleton.png" alt="スケルトン" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">スケルトン</div>
+    <div class="stat">HP 18 ／ ATK 9</div>
+    <div class="stat">EXP 13 ／ G 11</div>
+    <div class="stat">出現Lv 3</div>
+    <div class="area">A3(Lv5)・B3(Lv4)・C1(Lv2)・C2(Lv2)・下層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/golem.png" alt="ゴーレム" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">ゴーレム</div>
+    <div class="stat">HP 30 ／ ATK 12</div>
+    <div class="stat">EXP 22 ／ G 18</div>
+    <div class="stat">出現Lv 4</div>
+    <div class="area">A3(Lv5)・C3(Lv3)・下層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/orc.png" alt="オーク" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">オーク</div>
+    <div class="stat">HP 24 ／ ATK 11</div>
+    <div class="stat">EXP 18 ／ G 14</div>
+    <div class="stat">出現Lv 4</div>
+    <div class="area">B3(Lv4)・C3(Lv3)・下層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/mage.png" alt="まほうつかい" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">まほうつかい</div>
+    <div class="stat">HP 16 ／ ATK 13</div>
+    <div class="stat">EXP 24 ／ G 20</div>
+    <div class="stat">出現Lv 5</div>
+    <div class="area">A3(Lv5)・下層坑道</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/dragon.png" alt="ドラゴン" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">ドラゴン</div>
+    <div class="stat">HP 45 ／ ATK 15</div>
+    <div class="stat">EXP 40 ／ G 35</div>
+    <div class="stat">出現Lv 7</div>
+    <div class="area">A3(Lv5)</div>
+    
+  </div>
+<div class="card">
+    <img src="assets/enemies/mole.png" alt="きんのモグラ" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">きんのモグラ</div>
+    <div class="stat">HP 8 ／ ATK 4</div>
+    <div class="stat">EXP 80 ／ G 40</div>
+    <div class="stat">出現Lv 5</div>
+    <div class="area">C3(Lv3)</div>
+    <div class="sp">臆病（逃走しやすい）／硬い（攻撃ほぼ1）</div>
+  </div>
+<div class="card">
+    <img src="assets/enemies/golem.png" alt="門番ゴーレム" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">門番ゴーレム</div>
+    <div class="stat">HP 45 ／ ATK 12</div>
+    <div class="stat">EXP 60 ／ G 80</div>
+    <div class="stat">出現Lv —</div>
+    <div class="area">北の橋（固定戦）・A3(Lv5)・C3(Lv3)・下層坑道</div>
+    <div class="sp">北の橋の関所（固定戦）</div>
+  </div>
+<div class="card boss">
+    <img src="assets/enemies/demon.png" alt="坑底のぬし" loading="lazy" onerror="this.style.display='none'">
+    <div class="name">坑底のぬし</div>
+    <div class="stat">HP 70 ／ ATK 16</div>
+    <div class="stat">EXP 60 ／ G 100</div>
+    <div class="stat">出現Lv —</div>
+    <div class="area">下層ボス床</div>
+    <div class="sp">下層ボス床（逃走不可）</div>
+  </div>
+</div>
+</body>
+</html>
