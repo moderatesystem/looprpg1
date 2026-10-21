@@ -2,9 +2,9 @@
 // fal.ai等で生成したPNGを public/assets/enemies/<id>.png に置くと自動で使用される
 // （透過PNG推奨。なければ下の手描きシェイプにフォールバック）
 // 対象id: slime, bat, goblin, wolf, ghost, skeleton, golem, orc, mage, dragon, demon
-import { ENEMY_IDS } from '../data/enemies';
+import { TABLE } from '../data/enemies';
 
-export const ENEMY_ART_IDS = [...ENEMY_IDS, 'demon'];
+export const ENEMY_ART_IDS = [...new Set([...TABLE.map((e) => e.art || e.id), 'demon'])];
 
 export function preloadEnemyArt(scene) {
   scene.load.on('loaderror', () => { /* 素材なしでも続行（フォールバック描画） */ });
@@ -14,10 +14,13 @@ export function preloadEnemyArt(scene) {
 }
 
 // テクスチャがあれば画像、なければ手描きシェイプ
+// art: 別idの画像を流用、tint: 色を乗せる（亜種の色違い表現）
 export function drawEnemyArt(scene, enemy, cx, cy) {
-  if (scene.textures.exists(`enemy-${enemy.id}`)) {
-    const img = scene.add.image(cx, cy, `enemy-${enemy.id}`);
+  const artId = enemy.art || enemy.id;
+  if (scene.textures.exists(`enemy-${artId}`)) {
+    const img = scene.add.image(cx, cy, `enemy-${artId}`);
     img.setDisplaySize(170, 170);
+    if (enemy.tint) img.setTint(enemy.tint);
     return;
   }
   drawEnemyShape(scene, enemy, cx, cy);

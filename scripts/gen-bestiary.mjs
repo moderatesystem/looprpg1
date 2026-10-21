@@ -25,7 +25,7 @@ const rows = [
 const card = (e) => {
   const areas = (e.areas || []).join('・') || '—';
   const special = e.note ? `<div class="sp">${e.note}</div>` : '';
-  const img = `<img src="assets/enemies/${e.id}.png" alt="${e.name}" loading="lazy" onerror="this.style.display='none'">`;
+  const img = `<img src="assets/enemies/${e.art || e.id}.png" alt="${e.name}" loading="lazy" onerror="this.style.display='none'">`;
   return `<div class="card${e.boss ? ' boss' : ''}">
     ${img}
     <div class="name">${e.name}</div>
