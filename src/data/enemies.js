@@ -61,6 +61,11 @@ export function makeEnemy(playerLv, tile, danger = 1, pool = null) {
   };
 }
 
+export const GUARDIAN = {
+  id: 'golem', name: '門番ゴーレム', hp: 45, atk: 12, exp: 60, gold: 80,
+  color: 0x8d6e63,
+};
+
 export const BOSS = {
   id: 'demon', name: '坑底のぬし', hp: 70, atk: 16, exp: 60, gold: 100,
   color: 0xb71c1c, boss: true,

@@ -53,7 +53,7 @@ export function villageAt(x, y) {
 }
 
 export function npcAt(x, y) {
-  return DIALOGUES.npcs.find((n) => n.x === x && n.y === y) || null;
+  return DIALOGUES.npcs.find((n) => n.x === x && n.y === y && !(n.id === 'gatekeeper' && gameState.gateOpen)) || null;
 }
 
 export function copperCount() {
@@ -212,6 +212,7 @@ export default class FieldScene extends Phaser.Scene {
       }
     }
     for (const n of DIALOGUES.npcs) {
+      if (n.id === 'gatekeeper' && gameState.gateOpen) continue;
       const img = drawNpcFigure(this, n, n.x * TILE, n.y * TILE);
       if (img) {
         this.npcImgs.push(img);
@@ -310,6 +311,12 @@ export default class FieldScene extends Phaser.Scene {
       this.showTalk();
       return;
     }
+    if (n.gatekeeper) {
+      this.talk = { name: '門番ゴーレム', npc: n, lines: npcLines(n), idx: 0, choice: null, guardian: true };
+      this.cmdLock = true;
+      this.showTalk();
+      return;
+    }
     this.talk = { name: n.name, npc: n, lines: npcLines(n), idx: 0, choice: null };
     this.cmdLock = true;
     this.showTalk();
@@ -364,6 +371,11 @@ export default class FieldScene extends Phaser.Scene {
       if (k === 'x' || k === 'X') return this.chooseDeliver(false);
       return;
     }
+    if (t.choice === 'guardian') {
+      if (k === 'z' || k === 'Z' || k === 'Enter' || k === ' ') return this.chooseGuardian(true);
+      if (k === 'x' || k === 'X') return this.chooseGuardian(false);
+      return;
+    }
     if (!okKeys.includes(k)) return;
     t.idx += 1;
     if (t.idx < t.lines.length) { this.showTalk(); return; }
@@ -413,6 +425,11 @@ export default class FieldScene extends Phaser.Scene {
         this.setMessage('銅鉱石3個を渡すか？（Z=渡す X=やめる）');
         return;
       }
+    }
+    if (t.guardian && !gameState.gateOpen) {
+      t.choice = 'guardian';
+      this.setMessage('門番ゴーレムと戦うか？（Z=戦う X=やめる）');
+      return;
     }
     this.endTalk(t);
   }
@@ -525,6 +542,23 @@ export default class FieldScene extends Phaser.Scene {
     beep(700, 80);
     this.setMessage(`やくそうを買った！（残り${p.herbs}個・G${p.gold}）続けてどうぞ（X=やめる）`);
     this.refreshStatus();
+  }
+
+  chooseGuardian(yes) {
+    if (!yes) {
+      this.setMessage('門番ゴーレム「ヒキカエセ。」');
+      this.talk.choice = null;
+      this.talk.done = true;
+      this.refreshStatus();
+      return;
+    }
+    this.cmdLock = true;
+    stopBgm();
+    const cam = this.cameras.main;
+    cam.fadeOut(200, 0, 0, 0);
+    cam.once('camerafadeoutcomplete', () => {
+      this.scene.start('battle', { tile: '+', from: 'field', danger: 1.6, guardian: true });
+    });
   }
 
   chooseDeliver(yes) {

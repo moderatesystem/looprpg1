@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { makeEnemy, makeBoss } from '../data/enemies';
+import { makeEnemy, makeBoss, GUARDIAN } from '../data/enemies';
 import { expForLevel, rollTraitChoices, applyTrait, traitLabel, LEVEL_CAP } from '../data/traits';
 import { gameState, respawn, loadMeta, saveMeta, writeLegacy } from '../game/state';
 import { preloadEnemyArt, drawEnemyArt } from '../game/enemyArt';
@@ -39,9 +39,12 @@ export default class BattleScene extends Phaser.Scene {
     this.msgBusy = false;
     this.msgTimer = null;
     gameState.player.prayed = false;
+    this.guardian = !!data.guardian;
     this.enemy = data.boss
       ? makeBoss(gameState.player.lv, gameState.bossName)
-      : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1, data.pool || null);
+      : data.guardian
+        ? { ...GUARDIAN, poisonTurns: 0 }
+        : makeEnemy(gameState.player.lv + (data.lvBonus || 0), data.tile || '.', data.danger || 1, data.pool || null);
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
     this.drawScreen();
@@ -318,7 +321,16 @@ export default class BattleScene extends Phaser.Scene {
       this.refresh();
       return;
     }
-    const reward2 = `${line2} EXP+${exp} G+${gold}`;
+    if (this.guardian && !gameState.gateOpen) {
+      gameState.gateOpen = true;
+      const after = () => {
+        if (ups > 0) this.openTraitModal(ups, p.lv, gainHp, gainAtk);
+        else this.backToOrigin();
+      };
+      this.say(reward, () => this.say('門番を倒した！ 橋を渡れるようになった！', after, '#ff0'));
+      this.refresh();
+      return;
+    }
     if (ups > 0) {
       this.say(line1, () => this.say(reward2, () => this.openTraitModal(ups, p.lv, gainHp, gainAtk), highlight ? '#ff0' : undefined));
     } else {
