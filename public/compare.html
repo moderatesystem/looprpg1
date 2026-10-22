@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>モンスター画像 モデル・手法 比較ページ - Loop RPG</title>
+<style>
+  * { box-sizing: border-box; }
+  body { background: #101040; color: #fff; font-family: monospace; margin: 0; padding: 20px; }
+  h1 { font-size: 20px; border: 3px solid #fff; display: inline-block; padding: 8px 16px; background: #000; margin: 0 0 12px; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    background: #000; border: 2px solid #fff; padding: 10px 14px; margin-bottom: 18px;
+  }
+  .toolbar label { color: #ff0; font-size: 13px; margin-right: 4px; }
+  .toolbar button {
+    background: #1a1a50; color: #fff; border: 2px solid #8fd3ff; padding: 5px 12px;
+    font-family: monospace; font-size: 13px; cursor: pointer;
+  }
+  .toolbar button.active { background: #ff0; color: #000; border-color: #ff0; font-weight: bold; }
+  .section-title { color: #ff0; font-size: 17px; margin: 18px 0 8px; border-left: 5px solid #ff0; padding-left: 10px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(190px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .card {
+    background: #000; border: 3px solid #fff; padding: 10px; text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .card.recommend { border-color: #ff0; }
+  .badge {
+    font-size: 11px; padding: 2px 6px; margin-bottom: 6px;
+    background: #222; color: #8fd3ff; border: 1px solid #8fd3ff;
+  }
+  .card.recommend .badge { background: #ff0; color: #000; border-color: #ff0; font-weight: bold; }
+  .title { color: #ff0; font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+  .sub { color: #ccc; font-size: 12px; margin-bottom: 8px; }
+  .stage {
+    width: 100%; min-height: 190px; display: flex; align-items: center; justify-content: center;
+    background: #082008; border: 1px solid #355; padding: 8px; margin-bottom: 8px;
+  }
+  body.bg-black .stage { background: #000000; }
+  body.bg-check .stage {
+    background-image: linear-gradient(45deg, #222 25%, transparent 25%),
+      linear-gradient(-45deg, #222 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #222 75%),
+      linear-gradient(-45deg, transparent 75%, #222 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-color: #111;
+  }
+  .stage img {
+    width: 170px; height: 170px; object-fit: contain;
+    transition: width 0.15s, height 0.15s;
+  }
+  .stage img.pixel { image-rendering: pixelated; }
+  body.sz-96 .stage img { width: 96px; height: 96px; }
+  body.sz-170 .stage img { width: 170px; height: 170px; }
+  body.sz-260 .stage img { width: 260px; height: 260px; }
+  body.sz-260 .grid { grid-template-columns: repeat(3, minmax(280px, 1fr)); }
+  .meta { font-size: 12px; color: #aaa; line-height: 1.45; text-align: left; width: 100%; }
+  .prompt-box {
+    background: #000; border: 2px solid #558; padding: 12px; margin-top: 20px; font-size: 12px; line-height: 1.6;
+  }
+  .prompt-box code { color: #8fd3ff; display: block; white-space: pre-wrap; margin-top: 4px; }
+</style>
+</head>
+<body class="sz-170">
+<h1>モンスター画像 比較ビューア（旧 vs 新4層プロンプト A〜E）</h1>
+
+<div class="toolbar">
+  <div>
+    <label>表示サイズ：</label>
+    <button onclick="setSize('sz-96', this)">図鑑サイズ (96px)</button>
+    <button class="active" onclick="setSize('sz-170', this)">戦闘画面サイズ (170px)</button>
+    <button onclick="setSize('sz-260', this)">拡大比較 (260px・3列)</button>
+  </div>
+  <div>
+    <label>背景：</label>
+    <button class="active" onclick="setBg('', this)">戦闘窓 (#082008)</button>
+    <button onclick="setBg('bg-black', this)">純黒 (#000)</button>
+    <button onclick="setBg('bg-check', this)">透過チェッカー</button>
+  </div>
+  <div>
+    <a href="bestiary.html" style="color:#ff0;font-size:13px;">→ モンスターずかん (bestiary.html) へ</a>
+  </div>
+</div>
+
+<div class="section-title">① やどかりスライム（軟体ゼリー × 硬い巻貝の質感対比）</div>
+<div class="grid">
+  <div class="card">
+    <div class="badge">比較基準</div>
+    <div class="title">旧: 現行画像</div>
+    <div class="sub">GPT Image 1（旧Prompt）</div>
+    <div class="stage"><img class="pixel" src="assets/compare/tsumuri_OLD.png" alt="旧"></div>
+    <div class="meta">・front view + pixel-art指定<br>・正面棒立ちで平板</div>
+  </div>
+  <div class="card">
+    <div class="badge">方式 A ($0.04)</div>
+    <div class="title">A: Recraft V3</div>
+    <div class="sub">style: pixel_art</div>
+    <div class="stage"><img class="pixel" src="assets/compare/tsumuri_A.png" alt="A"></div>
+    <div class="meta">・ドット専用プリセット<br>・素朴だがディテールが簡略化</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">造形◎ ($0.03)</div>
+    <div class="title">B: FLUX.2 Pro</div>
+    <div class="sub">高精細2D原画</div>
+    <div class="stage"><img src="assets/compare/tsumuri_B.png" alt="B"></div>
+    <div class="meta">・ゼリーの透け感・躍動感が抜群<br>・背景除去を後処理で実施</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">安定・透過◎</div>
+    <div class="title">C: GPT Image 1</div>
+    <div class="sub">新4層Prompt・2D原画</div>
+    <div class="stage"><img src="assets/compare/tsumuri_C.png" alt="C"></div>
+    <div class="meta">・ネイティブ透過で輪郭が完璧<br>・目の表情と立体感が大幅向上</div>
+  </div>
+  <div class="card">
+    <div class="badge">Bのドット化</div>
+    <div class="title">D: FLUX.2 → 96px</div>
+    <div class="sub">24色減色＋1px黒フチ</div>
+    <div class="stage"><img class="pixel" src="assets/compare/tsumuri_D.png" alt="D"></div>
+    <div class="meta">・Bの躍動ポーズのままドット化<br>・レトロ画面と馴染む粒度</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">ドット派おすすめ</div>
+    <div class="title">E: GPT新 → 96px</div>
+    <div class="sub">24色減色＋1px黒フチ</div>
+    <div class="stage"><img class="pixel" src="assets/compare/tsumuri_E.png" alt="E"></div>
+    <div class="meta">・Cの綺麗な透過から96pxドット化<br>・フチ欠けゼロで重厚</div>
+  </div>
+</div>
+
+<div class="section-title">② ボーンナイト（白骨 × 黒鉄甲冑 × 蒼い眼光の質感対比）</div>
+<div class="grid">
+  <div class="card">
+    <div class="badge">比較基準</div>
+    <div class="title">旧: 現行画像</div>
+    <div class="sub">GPT Image 1（旧Prompt）</div>
+    <div class="stage"><img class="pixel" src="assets/compare/knight_OLD.png" alt="旧"></div>
+    <div class="meta">・front view + pixel-art指定<br>・直立不動のアイコン調</div>
+  </div>
+  <div class="card">
+    <div class="badge">方式 A ($0.04)</div>
+    <div class="title">A: Recraft V3</div>
+    <div class="sub">style: pixel_art</div>
+    <div class="stage"><img class="pixel" src="assets/compare/knight_A.png" alt="A"></div>
+    <div class="meta">・インディーゲーム風ドット<br>・骸骨の顔が兜に省略される</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">造形◎ ($0.03)</div>
+    <div class="title">B: FLUX.2 Pro</div>
+    <div class="sub">高精細2D原画</div>
+    <div class="stage"><img src="assets/compare/knight_B.png" alt="B"></div>
+    <div class="meta">・低い構え・骨と鉄の質感が圧巻<br>・ダークファンタジー寄り</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">安定・透過◎</div>
+    <div class="title">C: GPT Image 1</div>
+    <div class="sub">新4層Prompt・2D原画</div>
+    <div class="stage"><img src="assets/compare/knight_C.png" alt="C"></div>
+    <div class="meta">・デフォルメ頭身と威圧感の両立<br>・透過処理が不要で破綻なし</div>
+  </div>
+  <div class="card">
+    <div class="badge">Bのドット化</div>
+    <div class="title">D: FLUX.2 → 96px</div>
+    <div class="sub">24色減色＋1px黒フチ</div>
+    <div class="stage"><img class="pixel" src="assets/compare/knight_D.png" alt="D"></div>
+    <div class="meta">・Bの鋭い立ち姿をドット化<br>・PS1/サターン期のような密度</div>
+  </div>
+  <div class="card recommend">
+    <div class="badge">ドット派おすすめ</div>
+    <div class="title">E: GPT新 → 96px</div>
+    <div class="sub">24色減色＋1px黒フチ</div>
+    <div class="stage"><img class="pixel" src="assets/compare/knight_E.png" alt="E"></div>
+    <div class="meta">・塊感があり96pxでも視認性が高い<br>・背景透過の境界が最も綺麗</div>
+  </div>
+</div>
+
+<div class="prompt-box">
+  <strong style="color:#ff0;">使用した4層プロンプト構成（①斜め躍動ポーズ ＋ ②異素材の質感対比 ＋ ③リムライトと深い陰影 ＋ ④愛嬌と手強さのある目）</strong>
+  <code>[やどかりスライム] A fantasy RPG monster: a translucent emerald-green slime creature nestled inside a weathered spiral seashell, peeking out with large expressive golden eyes and waving two gelatinous tentacles in a playful yet ready battle stance. Three-quarter angle, dynamic asymmetrical silhouette. Rich tactile material contrast between the glossy semi-transparent jelly body with subtle internal bubbles and light refraction and the rough calcified ridges of the ancient shell. High-craft 2D fantasy game sprite art, dramatic rim lighting, deep shading, crisp clean dark outline, centered full body, isolated on transparent background, no text, no ground shadow.</code>
+  <code>[ボーンナイト] A fantasy RPG monster: an undead skeletal knight in battered dark-iron plate armor, crouching slightly in an aggressive sword-and-shield guard stance, cold cyan soul-fire glinting deep inside its eye sockets. Three-quarter angle, dynamic combat posture with a tattered cape flowing to one side. Rich tactile material contrast between cracked ivory bones, dented metallic armor plates with sharp specular highlights, and a notched broadsword. High-craft 2D fantasy game sprite art, dramatic rim lighting, deep shadows, crisp clean dark outline, centered full body, isolated on transparent background, no text, no ground shadow.</code>
+</div>
+
+<script>
+function setSize(cls, btn) {
+  document.body.classList.remove('sz-96', 'sz-170', 'sz-260');
+  document.body.classList.add(cls);
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setBg(cls, btn) {
+  document.body.classList.remove('bg-black', 'bg-check');
+  if (cls) document.body.classList.add(cls);
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
