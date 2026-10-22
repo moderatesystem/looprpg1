@@ -306,6 +306,7 @@ export default class BattleScene extends Phaser.Scene {
     // LvUP時は半分回復（宿屋の価値を残す）
     if (ups > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp / 2));
     const reward = `${line1} ${line2} EXP+${exp} G+${gold}`;
+    const reward2 = `${line2} EXP+${exp} G+${gold}`;
     if (isBoss) {
       gameState.bossDefeated = true;
       gameState.cleared = true;
