@@ -6,6 +6,7 @@ import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
 import { preloadTiles, putTile, tileHash } from '../game/tileArt';
+import { createActor, moveActor, destroyActor } from '../game/actors';
 import { beep, TILE, copperCount } from './FieldScene';
 
 // 坑道（複層）。凡例 #:壁 .:床 S:入口（キャンプに戻る） H:宝箱 B:ボス床
@@ -52,7 +53,7 @@ export default class DungeonScene extends Phaser.Scene {
     this.drawHud();
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
-    cam.startFollow(this.follower, true, 1, 1);
+    cam.startFollow(this.heroActor ? this.heroActor.img : this.follower, true, 0.16, 0.16);
     cam.fadeIn(250, 0, 0, 0);
     this.setMessage(`「${this.floorCfg().name}」にもぐった。光る岩は隣でEキーだ`);
     startBgm('dungeon');
@@ -91,6 +92,7 @@ export default class DungeonScene extends Phaser.Scene {
 
   drawMap() {
     if (this.follower) this.follower.destroy();
+    if (this.heroActor) { destroyActor(this.heroActor); this.heroActor = null; }
     const g = this.add.graphics();
     this.mapGfx = g;
     this.drawTiles();
@@ -99,7 +101,12 @@ export default class DungeonScene extends Phaser.Scene {
     );
     const pg = this.add.graphics();
     this.playerGfx = pg;
-    this.drawPlayer();
+    if (this.textures.exists('hero')) {
+      this.heroActor = createActor(this, this.dx * TILE + TILE / 2, this.dy * TILE + TILE / 2, 'hero', 50);
+      pg.clear();
+    } else {
+      this.drawPlayer();
+    }
   }
 
   drawTiles() {
@@ -115,8 +122,8 @@ export default class DungeonScene extends Phaser.Scene {
         const px = x * TILE, py = y * TILE;
         const cx = px + TILE / 2, cy = py + TILE / 2;
         let imgOk = null;
-        if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE);
-        else imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE);
+        if (ch === '#') imgOk = putTile(this, 't-dungeon-wall', cx, cy, TILE + 6);
+        else imgOk = putTile(this, 't-dungeon-floor', cx, cy, TILE + 8);
         if (imgOk) {
           if (ch !== '#') { const hh = tileHash(x + 31, y + 17); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
           this.tileImgs.push(imgOk);
@@ -131,6 +138,26 @@ export default class DungeonScene extends Phaser.Scene {
     // マーカー類は前面レイヤーに描く（タイル画像は後生成＝前面になるため同Graphicsだと隠れる）
     const m = this.add.graphics();
     this.markGfx = m;
+    // 壁と床の境目に落ち影を入れて立体感を出す
+    const atD = (ax, ay) => MAP[ay]?.[ax];
+    for (let y = 0; y < MAP.length; y++) {
+      for (let x = 0; x < MAP[y].length; x++) {
+        if (MAP[y][x] === '#') continue;
+        const px = x * TILE, py = y * TILE;
+        const D = 12;
+        if (atD(x, y - 1) === '#') {
+          m.fillStyle(0x000000, 0.34); m.fillRect(px, py, TILE, 5);
+          m.fillStyle(0x000000, 0.16); m.fillRect(px, py + 5, TILE, D - 5);
+        }
+        if (atD(x - 1, y) === '#') {
+          m.fillStyle(0x000000, 0.28); m.fillRect(px, py, 4, TILE);
+          m.fillStyle(0x000000, 0.12); m.fillRect(px + 4, py, D - 4, TILE);
+        }
+        if (atD(x + 1, y) === '#') {
+          m.fillStyle(0x000000, 0.22); m.fillRect(px + TILE - 4, py, 4, TILE);
+        }
+      }
+    }
     const hasFloorImg = this.textures.exists('t-dungeon-floor');
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
@@ -169,6 +196,7 @@ export default class DungeonScene extends Phaser.Scene {
   }
 
   drawPlayer() {
+    if (this.heroActor) return;
     const pg = this.playerGfx;
     const px = this.dx * TILE, py = this.dy * TILE;
     if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
@@ -259,7 +287,8 @@ export default class DungeonScene extends Phaser.Scene {
     gameState.px = nx; gameState.py = ny;
     this.moved = true;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
-    this.drawPlayer();
+    if (this.heroActor) moveActor(this, this.heroActor, nx * TILE + TILE / 2, ny * TILE + TILE / 2, dx, dy, 130);
+    else this.drawPlayer();
     beep(660, 30);
     this.onEnterTile(ch);
     this.refreshStatus();

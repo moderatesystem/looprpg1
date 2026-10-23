@@ -4,8 +4,9 @@ import DIALOGUES from '../data/dialogues.json';
 import { gameState, resetState, saveGame, loadGame, hasSave, loadMeta } from '../game/state';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
-import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
-import { preloadTiles, putTile, tileHash } from '../game/tileArt';
+import { preloadCharArt, drawHeroFigure, npcKey } from '../game/charArt';
+import { preloadTiles, putTile, putObject, tileHash } from '../game/tileArt';
+import { createActor, moveActor, destroyActor, setActorLabel, setupWander, stopWander, turnTo } from '../game/actors';
 import { regionAt, regionDanger } from '../data/regions';
 
 export const TILE = 64;
@@ -85,25 +86,110 @@ export default class FieldScene extends Phaser.Scene {
 
   // 生成タイルがあれば画像描画。なければfalse（矩形フォールバック用）
   drawTileImage(x, y, ch, cx, cy) {
-    let baseKey = null;
-    if (ch === '#') baseKey = 't-mountain';
-    else if (ch === '~') baseKey = 't-water';
+    const gx = x * TILE, gy = y * TILE, bottom = gy + TILE;
+    let baseKey = 't-grass';
+    if (ch === '~') baseKey = 't-water';
     else if (ch === ':') baseKey = 't-sand';
     else if (ch === '+') baseKey = 't-bridge';
     else if (ch === 'M') baseKey = 't-demon';
-    else baseKey = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
-    const baseImg = putTile(this, baseKey, cx, cy, TILE);
+    const baseImg = putTile(this, baseKey, cx, cy, TILE + 8);
     if (!baseImg) return false;
+    // 隣接タイルと少し重ねて継ぎ目を消す＋反転で繰り返し感を軽減
+    const hh = tileHash(x + 457, y + 291);
+    if (baseKey !== 't-bridge') baseImg.setFlip(hh % 2 === 0, hh % 3 === 0);
     if (ch === '~') this.waterImgs.push(baseImg);
-    // 同一テクスチャの繰り返し感を消すため反転を分散させる
-    const h = tileHash(x + 101, y + 57);
-    baseImg.setFlip(h % 2 === 0, h % 3 === 0);
-    if (ch === 'T') putTile(this, 'p-tree', cx, cy, 54);
-    else if (ch === 'C') putTile(this, 'p-castle', cx, cy - 6, 84);
-    else if (ch === 'V') putTile(this, 'p-house', cx, cy, 84);
-    else if (ch === 'D') putTile(this, 'p-mine', cx, cy, TILE);
+    // 地域ごとの色味（テリトリー差を地面に反映）
+    const region = regionAt(x, y);
+    if (region && region.tone && (ch === '.' || ch === 'T' || ch === 'S' || ch === 'C' || ch === 'V' || ch === 'D')) {
+      const [dr, dg, db] = region.tone;
+      const cr = Math.max(0, Math.min(255, 255 + dr * 2));
+      const cg = Math.max(0, Math.min(255, 255 + dg * 2));
+      const cb = Math.max(0, Math.min(255, 255 + db * 2));
+      baseImg.setTint((cr << 16) | (cg << 8) | cb);
+    }
+    // 立体オブジェクト（奥行きで前後関係を付ける）
+    if (ch === '#') {
+      const h = tileHash(x + 7, y + 13);
+      const m = putObject(this, 'p-rock-mountain', cx, bottom + 12, TILE * (1.06 + (h % 5) * 0.05), { shadowScale: 0.7 });
+      if (m) { m.setFlipX((h >> 3) % 2 === 0); m.setTint(shade(0xffffff, -((h >> 5) % 22))); }
+    } else if (ch === 'T') {
+      const h = tileHash(x + 31, y + 17);
+      const pine = h % 3 === 0;
+      const t = putObject(this, pine ? 'p-tree-pine' : 'p-tree', cx, bottom + 6, TILE * (1.14 + (h % 4) * 0.05), { shadowScale: 0.64 });
+      if (t) { t.setFlipX((h >> 2) % 2 === 0); t.setTint(shade(0xffffff, -((h >> 4) % 18))); }
+    } else if (ch === 'C') {
+      putObject(this, 'p-castle', cx, bottom + 2, TILE * 1.72, { shadowScale: 0.78 });
+    } else if (ch === 'V') {
+      putObject(this, 'p-house', cx, bottom + 2, TILE * 1.34, { shadowScale: 0.68 });
+    } else if (ch === 'D') {
+      putObject(this, 'p-mine', cx, bottom + 2, TILE * 1.16, { shadowScale: 0.66 });
+    }
+    // 草原の小物デカール（同じ絵の繰り返し感を消す）
+    if (ch === '.' || ch === 'S') {
+      const h = tileHash(x * 3 + 11, y * 7 + 5) % 100;
+      const ox = (tileHash(x + 3, y + 9) % 24) - 12;
+      const oy = (tileHash(x + 8, y + 2) % 20) - 10;
+      if (h < 6) this.addDecal('d-flower-a', cx + ox, cy + oy, 16, bottom);
+      else if (h < 11) this.addDecal('d-flower-b', cx + ox, cy + oy, 16, bottom);
+      else if (h < 20) this.addDecal('d-tuft', cx + ox, cy + oy, 18, bottom);
+      else if (h < 24) this.addDecal('d-stone', cx + ox, cy + oy, 16, bottom);
+    }
     return true;
   }
+
+  addDecal(key, x, y, size, depthY) {
+    if (!this.textures.exists(key)) return null;
+    const img = this.add.image(x, y, key).setDisplaySize(size, size).setDepth(depthY - 3);
+    if (!this.decalImgs) this.decalImgs = [];
+    this.decalImgs.push(img);
+    return img;
+  }
+
+  // 水際の白波・砂浜の濡れ縁（タイル画像の上に重ねる）
+  drawEdges() {
+    if (this.edgeGfx) this.edgeGfx.destroy();
+    const e = this.add.graphics().setDepth(2);
+    this.edgeGfx = e;
+    const H = FIELD_MAP.length, W = FIELD_MAP[0].length;
+    const at = (x, y) => (y < 0 || x < 0 || y >= H || x >= W) ? '#' : FIELD_MAP[y][x];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const ch = at(x, y);
+        const gx = x * TILE, gy = y * TILE;
+        if (ch === '~') {
+          const foam = (dx, dy) => {
+            const n = at(x + dx, y + dy);
+            return n !== '~' && n !== '#' && n !== 'M';
+          };
+          // 波打ち際：やわらかい光の帯＋まばらな泡
+          const shore = (dx, dy) => {
+            const w = TILE + 8;
+            if (dy < 0) {
+              e.fillStyle(0xbfe9ff, 0.18); e.fillRect(gx - 4, gy + 2, w, 9);
+              e.fillStyle(0xeaf8ff, 0.30); e.fillRect(gx - 4, gy + 3, w, 3);
+            } else if (dy > 0) {
+              e.fillStyle(0xbfe9ff, 0.18); e.fillRect(gx - 4, gy + TILE - 11, w, 9);
+              e.fillStyle(0xeaf8ff, 0.28); e.fillRect(gx - 4, gy + TILE - 6, w, 3);
+            } else if (dx < 0) {
+              e.fillStyle(0xbfe9ff, 0.18); e.fillRect(gx + 2, gy - 4, 9, w);
+              e.fillStyle(0xeaf8ff, 0.28); e.fillRect(gx + 3, gy - 4, 3, w);
+            } else {
+              e.fillStyle(0xbfe9ff, 0.18); e.fillRect(gx + TILE - 11, gy - 4, 9, w);
+              e.fillStyle(0xeaf8ff, 0.28); e.fillRect(gx + TILE - 6, gy - 4, 3, w);
+            }
+          };
+          if (foam(0, -1)) shore(0, -1);
+          if (foam(0, 1)) shore(0, 1);
+          if (foam(-1, 0)) shore(-1, 0);
+          if (foam(1, 0)) shore(1, 0);
+        } else if (ch === ':') {
+          if (at(x, y + 1) === '~') { e.fillStyle(0xb98d4e, 0.45); e.fillRect(gx, gy + TILE - 7, TILE, 7); }
+          if (at(x, y - 1) === '~') { e.fillStyle(0xb98d4e, 0.45); e.fillRect(gx, gy, TILE, 7); }
+        }
+      }
+    }
+  }
+
 
   create() {
     const st = gameState;
@@ -135,7 +221,7 @@ export default class FieldScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, FIELD_MAP[0].length * TILE, FIELD_MAP.length * TILE);
-    cam.startFollow(this.follower, true, 1, 1);
+    cam.startFollow(this.heroActor ? this.heroActor.img : this.follower, true, 0.16, 0.16);
     cam.fadeIn(200, 0, 0, 0);
 
     if (st.pendingMsg) {
@@ -146,7 +232,7 @@ export default class FieldScene extends Phaser.Scene {
     }
 
     startBgm('field');
-    this.events.once('shutdown', stopBgm);
+    this.events.once('shutdown', () => { stopBgm(); stopWander(this.npcEntries || []); });
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyW = this.input.keyboard.addKey('W');
@@ -160,9 +246,15 @@ export default class FieldScene extends Phaser.Scene {
   drawField() {
     if (this.fieldGfx) this.fieldGfx.destroy();
     if (this.playerGfx) this.playerGfx.destroy();
+    if (this.edgeGfx) this.edgeGfx.destroy();
     if (this.follower) this.follower.destroy();
+    if (this.decalImgs) this.decalImgs.forEach((i) => i.destroy());
+    this.decalImgs = [];
     if (this.npcImgs) this.npcImgs.forEach((i) => i.destroy());
     this.npcImgs = [];
+    if (this.heroActor) { destroyActor(this.heroActor); this.heroActor = null; }
+    if (this.npcActors) this.npcActors.forEach((a) => destroyActor(a));
+    this.npcActors = [];
     this.waterImgs = [];
     const g = this.add.graphics();
     this.fieldGfx = g;
@@ -211,11 +303,19 @@ export default class FieldScene extends Phaser.Scene {
         }
       }
     }
-    for (const n of DIALOGUES.npcs) {
+    this.drawEdges();
+    // NPC：静的役割は固定、村人・旅人はゆるく散策する
+    if (this.npcEntries) stopWander(this.npcEntries);
+    this.npcEntries = [];
+    this.npcs = DIALOGUES.npcs.map((n) => ({ ...n }));
+    for (const n of this.npcs) {
       if (n.id === 'gatekeeper' && gameState.gateOpen) continue;
-      const img = drawNpcFigure(this, n, n.x * TILE, n.y * TILE);
-      if (img) {
-        this.npcImgs.push(img);
+      const px = n.x * TILE + TILE / 2, py = n.y * TILE + TILE / 2;
+      let actor = null;
+      if (this.textures.exists(npcKey(n.id))) {
+        actor = createActor(this, px, py, npcKey(n.id), 46);
+        setActorLabel(this, actor, n.name);
+        this.npcActors.push(actor);
       } else {
         const c = npcColor(n);
         g.fillStyle(c, 1);
@@ -223,8 +323,18 @@ export default class FieldScene extends Phaser.Scene {
         g.lineStyle(3, 0x000000, 1);
         g.strokeRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
       }
-      this.add.text(n.x * TILE + 2, n.y * TILE - 18, n.name, {
-        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: "'DotGothic16', monospace",
+      const fixed = !!(n.gatekeeper || n.foremanNpc || n.toolshop || n.id === 'guard');
+      if (actor && !fixed) this.npcEntries.push({ npc: n, actor });
+    }
+    if (this.npcEntries.length) {
+      setupWander(this, this.npcEntries, {
+        radius: 2,
+        tileAt: (tx, ty) => {
+          const c = FIELD_MAP[ty]?.[tx];
+          return ['.', 'T', ':', 'S'].includes(c) ? c : null;
+        },
+        isFree: (tx, ty) => !this.npcHere(tx, ty) && !(gameState.px === tx && gameState.py === ty),
+        canAct: () => !this.cmdLock && !this.talk && !isStatusOpen(),
       });
     }
     this.follower = this.add.rectangle(
@@ -232,13 +342,32 @@ export default class FieldScene extends Phaser.Scene {
     );
     const pg = this.add.graphics();
     this.playerGfx = pg;
-    this.drawPlayer();
+    if (this.textures.exists('hero')) {
+      this.heroActor = createActor(this, gameState.px * TILE + TILE / 2, gameState.py * TILE + TILE / 2, 'hero', 50);
+      pg.clear();
+    } else {
+      this.heroActor = null;
+      this.drawPlayer();
+    }
     if (this.waterImgs.length) {
-      this.tweens.add({ targets: this.waterImgs, alpha: 0.82, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: this.waterImgs, alpha: 0.86, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
 
+  npcHere(x, y) {
+    return (this.npcs || []).find((n) => n.x === x && n.y === y) || null;
+  }
+
+  actorFor(npc) {
+    const e = (this.npcEntries || []).find((it) => it.npc === npc);
+    return e ? e.actor : null;
+  }
+
   drawPlayer() {
+    if (this.heroActor) {
+      moveActor(this, this.heroActor, gameState.px * TILE + TILE / 2, gameState.py * TILE + TILE / 2, 0, 0, 1);
+      return;
+    }
     const pg = this.playerGfx;
     const px = gameState.px * TILE, py = gameState.py * TILE;
     if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
@@ -289,7 +418,7 @@ export default class FieldScene extends Phaser.Scene {
   adjacentNpc() {
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
     for (const [dx, dy] of dirs) {
-      const n = npcAt(gameState.px + dx, gameState.py + dy);
+      const n = this.npcHere(gameState.px + dx, gameState.py + dy);
       if (n) return n;
     }
     return null;
@@ -301,6 +430,9 @@ export default class FieldScene extends Phaser.Scene {
       this.setMessage('この辺りには 誰もいないようだ。');
       return;
     }
+    // 話しかけられた相手はこちらを向く
+    const a = this.actorFor(n);
+    if (a) turnTo(a, this.heroActor);
     if (n.foremanNpc) {
       const stage = this.foremanFieldStage();
       const lines = stage === 'ordered'
@@ -603,12 +735,13 @@ export default class FieldScene extends Phaser.Scene {
   tryMove(dx, dy) {
     const nx = gameState.px + dx, ny = gameState.py + dy;
     if (ny < 0 || nx < 0 || ny >= FIELD_MAP.length || nx >= FIELD_MAP[0].length) return;
-    if (npcAt(nx, ny)) return;
+    if (this.npcHere(nx, ny)) return;
     const ch = FIELD_MAP[ny][nx];
     if (!this.passable(ch)) return;
     gameState.px = nx; gameState.py = ny;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
-    this.drawPlayer();
+    if (this.heroActor) moveActor(this, this.heroActor, nx * TILE + TILE / 2, ny * TILE + TILE / 2, dx, dy, 130);
+    else this.drawPlayer();
     const regionChanged = this.lastRegionId !== this.currentRegion()?.id;
     this.lastRegionId = this.currentRegion()?.id ?? null;
     this.onEnterTile(ch, regionChanged);

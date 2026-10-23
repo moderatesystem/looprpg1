@@ -15,3 +15,18 @@ window.game = new Phaser.Game({
   physics: { default: 'arcade' },
   scene: [FieldScene, BattleScene, DungeonScene, TownScene],
 });
+
+// 動作確認用：?scene=town&town=v_start / ?scene=dungeon&floor=0 で直接開ける
+const q = new URLSearchParams(location.search);
+const direct = q.get('scene');
+if (direct === 'town' || direct === 'dungeon') {
+  window.game.events.once('ready', () => {
+    setTimeout(() => {
+      if (direct === 'town') {
+        window.game.scene.start('town', { townId: q.get('town') || 'v_start', spawn: true });
+      } else {
+        window.game.scene.start('dungeon', { floor: Number(q.get('floor') || 0) });
+      }
+    }, 50);
+  });
+}

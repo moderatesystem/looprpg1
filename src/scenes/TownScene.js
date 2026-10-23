@@ -4,8 +4,9 @@ import { gameState, saveGame, loadMeta, startNextLoop } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, jingle } from '../game/sound';
-import { preloadCharArt, drawHeroFigure, drawNpcFigure } from '../game/charArt';
-import { preloadTiles, putTile, tileHash } from '../game/tileArt';
+import { preloadCharArt, drawHeroFigure, npcKey } from '../game/charArt';
+import { preloadTiles, putTile, putObject, tileHash } from '../game/tileArt';
+import { createActor, moveActor, destroyActor, setActorLabel, setupWander, stopWander, turnTo } from '../game/actors';
 import { beep, TILE, copperCount } from './FieldScene';
 
 // 町・城マップ（DQ1式の分離マップ）。凡例 #:壁 .:地面 H:家 T:木 K:玉座 B:宝箱 D:出入口
@@ -69,6 +70,10 @@ export default class TownScene extends Phaser.Scene {
     this.moveCd = 0;
     this.cmdLock = false;
     this.talk = null;
+    this.npcs = (town.npcs || []).map((n) => ({ ...n }));
+    this.npcEntries = [];
+    this.npcActors = [];
+    this.decalImgs = [];
 
     this.drawTown();
     this.drawHud();
@@ -76,12 +81,12 @@ export default class TownScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const MAP = town.map;
     cam.setBounds(0, 0, MAP[0].length * TILE, MAP.length * TILE);
-    cam.startFollow(this.follower, true, 1, 1);
+    cam.startFollow(this.heroActor ? this.heroActor.img : this.follower, true, 0.16, 0.16);
     cam.fadeIn(200, 0, 0, 0);
     this.setMessage(`「${town.name}」に入った。`);
 
     startBgm('field');
-    this.events.once('shutdown', stopBgm);
+    this.events.once('shutdown', () => { stopBgm(); stopWander(this.npcEntries || []); });
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyW = this.input.keyboard.addKey('W');
@@ -95,7 +100,12 @@ export default class TownScene extends Phaser.Scene {
   tileAt(x, y) { return this.town().map[y][x]; }
 
   npcAt(x, y) {
-    return (this.town().npcs || []).find((n) => n.x === x && n.y === y) || null;
+    return (this.npcs || []).find((n) => n.x === x && n.y === y) || null;
+  }
+
+  actorFor(npc) {
+    const e = (this.npcEntries || []).find((it) => it.npc === npc);
+    return e ? e.actor : null;
   }
 
   drawTown() {
@@ -105,6 +115,11 @@ export default class TownScene extends Phaser.Scene {
     if (this.follower) this.follower.destroy();
     if (this.npcImgs) this.npcImgs.forEach((i) => i.destroy());
     this.npcImgs = [];
+    if (this.decalImgs) this.decalImgs.forEach((i) => i.destroy());
+    this.decalImgs = [];
+    if (this.heroActor) { destroyActor(this.heroActor); this.heroActor = null; }
+    if (this.npcActors) this.npcActors.forEach((a) => destroyActor(a));
+    this.npcActors = [];
     if (this.tileImgs) this.tileImgs.forEach((i) => i.destroy());
     this.tileImgs = [];
     const g = this.add.graphics();
@@ -119,12 +134,11 @@ export default class TownScene extends Phaser.Scene {
         const ch = MAP[y][x];
         const cx = x * TILE + TILE / 2, cy = y * TILE + TILE / 2;
         let imgOk = null;
-        if (ch === '#') imgOk = putTile(this, wallKey, cx, cy, TILE);
-        else if (stone) imgOk = putTile(this, floorKey, cx, cy, TILE);
+        if (ch === '#') imgOk = putTile(this, wallKey, cx, cy, TILE + 6);
+        else if (stone) imgOk = putTile(this, floorKey, cx, cy, TILE + 6);
         else {
-          const gk = (tileHash(x, y) % 2 === 0) ? 't-grass-a' : 't-grass-b';
-          imgOk = putTile(this, gk, cx, cy, TILE);
-          if (imgOk) { const hh = tileHash(x + 101, y + 57); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
+          imgOk = putTile(this, 't-grass', cx, cy, TILE + 8);
+          if (imgOk) { const hh = tileHash(x + 457, y + 291); imgOk.setFlip(hh % 2 === 0, hh % 3 === 0); }
         }
         if (imgOk) this.tileImgs.push(imgOk);
         else {
@@ -135,41 +149,61 @@ export default class TownScene extends Phaser.Scene {
         }
       }
     }
-    // マーカー類は前面レイヤー
+    // 立体オブジェクト＋マーカー（足元のYで奥行きソート）
     const m = this.add.graphics();
     this.markGfx = m;
+    // 壁際の落ち影
+    const atT = (ax, ay) => MAP[ay]?.[ax];
+    for (let y = 0; y < MAP.length; y++) {
+      for (let x = 0; x < MAP[y].length; x++) {
+        if (MAP[y][x] === '#') continue;
+        const px = x * TILE, py = y * TILE;
+        if (atT(x, y - 1) === '#') {
+          m.fillStyle(0x000000, 0.32); m.fillRect(px, py, TILE, 5);
+          m.fillStyle(0x000000, 0.14); m.fillRect(px, py + 5, TILE, 9);
+        }
+        if (atT(x - 1, y) === '#') {
+          m.fillStyle(0x000000, 0.26); m.fillRect(px, py, 4, TILE);
+          m.fillStyle(0x000000, 0.10); m.fillRect(px + 4, py, 8, TILE);
+        }
+        if (atT(x + 1, y) === '#') {
+          m.fillStyle(0x000000, 0.20); m.fillRect(px + TILE - 4, py, 4, TILE);
+        }
+      }
+    }
     for (let y = 0; y < MAP.length; y++) {
       for (let x = 0; x < MAP[y].length; x++) {
         const ch = MAP[y][x];
         const px = x * TILE, py = y * TILE;
         const cx = px + TILE / 2, cy = py + TILE / 2;
+        const bottom = py + TILE;
         if (ch === 'H') {
-          if (!putTile(this, 'p-house', cx, cy, 60)) {
+          if (!putObject(this, 'p-house', cx, bottom + 2, TILE * 1.36)) {
             m.fillStyle(0x7a3b00, 1); m.fillRect(px + 10, py + 10, 44, 40);
           }
         }
         if (ch === 'T') {
-          if (!putTile(this, 'p-tree', cx, cy, 54)) {
+          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18, { shadowScale: 0.64 })) {
             m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
           }
         }
         if (ch === 'K') {
-          if (!putTile(this, 'p-throne', cx, cy, 60)) {
+          if (!putObject(this, 'p-throne', cx, bottom, TILE * 1.06)) {
             m.fillStyle(0xd8c23a, 1); m.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
           }
         }
         if (ch === 'P') {
-          if (!putTile(this, 'p-pot', cx, cy, 44)) {
+          if (!putObject(this, 'p-pot', cx, bottom, 46, { shadowScale: 0.5 })) {
             m.fillStyle(0x8d5a2b, 1); m.fillRect(px + 18, py + 22, 28, 26);
           }
         }
         if (ch === 'N') {
-          if (!putTile(this, 'p-sign', cx, cy, 40)) {
+          if (!putObject(this, 'p-sign', cx, bottom, 44, { shadowScale: 0.42 })) {
             m.fillStyle(0x6e3e1c, 1); m.fillRect(px + 26, py + 14, 12, 36);
           }
         }
         if (ch === 'F') {
-          if (!putTile(this, 'p-fountain', cx, cy, 60)) {
+          if (!putObject(this, 'p-fountain', cx, bottom, TILE * 1.02)) {
             m.fillStyle(0x3a6fd8, 1); m.fillRect(px + 12, py + 12, 40, 40);
           }
         }
@@ -177,25 +211,60 @@ export default class TownScene extends Phaser.Scene {
           const b = (town.chests || []).find((c) => c.x === x && c.y === y);
           const opened = b && gameState.castleChests[`${this.townId}:${b.id}`];
           if (!opened) {
+            m.fillStyle(0x000000, 0.28); m.fillEllipse(cx, bottom - 8, 40, 12);
             m.fillStyle(0xd8a03a, 1); m.fillRect(px + 12, py + 16, 40, 32);
-            m.fillStyle(0x000000, 1); m.fillRect(px + 26, py + 28, 12, 8);
+            m.fillStyle(0x8a5a1a, 1); m.fillRect(px + 12, py + 30, 40, 5);
+            m.fillStyle(0xffe082, 1); m.fillRect(px + 12, py + 16, 40, 3);
+            m.fillStyle(0x000000, 1); m.fillRect(px + 28, py + 28, 10, 10);
           }
         }
-        if (ch === 'D') { m.fillStyle(0x6e3e1c, 1); m.fillRect(px + 14, py + 14, TILE - 28, TILE - 28); }
+        if (ch === 'D') {
+          m.fillStyle(0x000000, 0.35); m.fillRect(px + 14, py + 14, TILE - 28, TILE - 22);
+          m.fillStyle(0x6e3e1c, 1);
+          m.fillRect(px + 14, py + 14, 6, TILE - 22);
+          m.fillRect(px + TILE - 20, py + 14, 6, TILE - 22);
+          m.fillRect(px + 14, py + 14, TILE - 28, 6);
+        }
+        // 外の草地・石畳に小物を散らす
+        if ((ch === '.' || ch === 'T') && !stone) {
+          const h = tileHash(x * 5 + 3, y * 9 + 7) % 100;
+          const ox = (tileHash(x + 5, y + 6) % 22) - 11;
+          if (h < 7) this.addDecal('d-flower-a', cx + ox, cy, 16, bottom);
+          else if (h < 13) this.addDecal('d-tuft', cx + ox, cy, 18, bottom);
+          else if (h < 16) this.addDecal('d-stone', cx + ox, cy, 15, bottom);
+        }
       }
     }
-    for (const n of town.npcs || []) {
-      const img = drawNpcFigure(this, n, n.x * TILE, n.y * TILE);
-      if (img) this.npcImgs.push(img);
-      else {
+    // NPC（店・宿・教会・王・衛兵は固定、村人・旅人は散策）
+    if (this.npcEntries) stopWander(this.npcEntries);
+    this.npcEntries = [];
+    this.npcActors = [];
+    for (const n of this.npcs) {
+      const px = n.x * TILE + TILE / 2, py = n.y * TILE + TILE / 2;
+      let actor = null;
+      if (this.textures.exists(npcKey(n.id))) {
+        actor = createActor(this, px, py, npcKey(n.id), 46);
+        setActorLabel(this, actor, n.name);
+        this.npcActors.push(actor);
+      } else {
         const c = npcColor(n);
         g.fillStyle(c, 1);
         g.fillRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
         g.lineStyle(3, 0x000000, 1);
         g.strokeRect(n.x * TILE + 18, n.y * TILE + 18, 28, 28);
       }
-      this.add.text(n.x * TILE + 2, n.y * TILE - 18, n.name, {
-        fontSize: '12px', color: '#fff', backgroundColor: '#000', fontFamily: "'DotGothic16', monospace",
+      const fixed = !!(n.inn || n.shop || n.church || n.smith || n.toolshop || n.king || n.guard || n.guard_in || n.soldier);
+      if (actor && !fixed) this.npcEntries.push({ npc: n, actor });
+    }
+    if (this.npcEntries.length) {
+      setupWander(this, this.npcEntries, {
+        radius: 2,
+        tileAt: (tx, ty) => {
+          const c = this.town().map[ty]?.[tx];
+          return ['.', 'T'].includes(c) ? c : null;
+        },
+        isFree: (tx, ty) => !this.npcAt(tx, ty) && !(this.tx === tx && this.ty === ty),
+        canAct: () => !this.cmdLock && !this.talk && !isStatusOpen(),
       });
     }
     this.follower = this.add.rectangle(
@@ -203,10 +272,25 @@ export default class TownScene extends Phaser.Scene {
     );
     const pg = this.add.graphics();
     this.playerGfx = pg;
-    this.drawPlayer();
+    if (this.textures.exists('hero')) {
+      this.heroActor = createActor(this, this.tx * TILE + TILE / 2, this.ty * TILE + TILE / 2, 'hero', 50);
+      pg.clear();
+    } else {
+      this.heroActor = null;
+      this.drawPlayer();
+    }
+  }
+
+  addDecal(key, x, y, size, depthY) {
+    if (!this.textures.exists(key)) return null;
+    const img = this.add.image(x, y, key).setDisplaySize(size, size).setDepth(depthY - 3);
+    if (!this.decalImgs) this.decalImgs = [];
+    this.decalImgs.push(img);
+    return img;
   }
 
   drawPlayer() {
+    if (this.heroActor) return;
     const pg = this.playerGfx;
     const px = this.tx * TILE, py = this.ty * TILE;
     if (drawHeroFigure(this, pg, px, py, this.heroHolder || (this.heroHolder = {}))) return;
@@ -276,6 +360,8 @@ export default class TownScene extends Phaser.Scene {
     for (const [dx, dy] of dirs) {
       const n = this.npcAt(this.tx + dx, this.ty + dy);
       if (n) {
+        const a = this.actorFor(n);
+        if (a) turnTo(a, this.heroActor);
         if (n.king) {
           const stage = kingStage();
           const lines = this.kingLines(stage);
@@ -554,7 +640,8 @@ export default class TownScene extends Phaser.Scene {
     this.tx = nx; this.ty = ny;
     gameState.px = nx; gameState.py = ny;
     this.follower.setPosition(nx * TILE + TILE / 2, ny * TILE + TILE / 2);
-    this.drawPlayer();
+    if (this.heroActor) moveActor(this, this.heroActor, nx * TILE + TILE / 2, ny * TILE + TILE / 2, dx, dy, 130);
+    else this.drawPlayer();
     beep(660, 30);
     this.onEnterTile(ch);
     this.refreshStatus();
