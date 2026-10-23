@@ -3,6 +3,7 @@ import FieldScene from './scenes/FieldScene';
 import BattleScene from './scenes/BattleScene';
 import DungeonScene from './scenes/DungeonScene';
 import TownScene from './scenes/TownScene';
+import { initDebug } from './game/debug';
 
 window.game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -17,6 +18,7 @@ window.game = new Phaser.Game({
 });
 
 // 動作確認用：?scene=town&town=v_start / ?scene=dungeon&floor=0 で直接開ける
+initDebug();
 const q = new URLSearchParams(location.search);
 const direct = q.get('scene');
 if (direct === 'town' || direct === 'dungeon') {

@@ -183,7 +183,7 @@ export default class TownScene extends Phaser.Scene {
           }
         }
         if (ch === 'T') {
-          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18)) {
+          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18, { depthOffset: -(TILE - 12) })) {
             m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
           }
         }

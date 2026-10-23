@@ -7,6 +7,7 @@ import { startBgm, stopBgm, jingle, toggleMute, isMuted } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, npcKey } from '../game/charArt';
 import { preloadTiles, putTile, putObject, tileHash } from '../game/tileArt';
 import { createActor, moveActor, destroyActor, setActorLabel, setupWander, stopWander, turnTo } from '../game/actors';
+import { debugNoEncounter } from '../game/debug';
 import { regionAt, regionDanger } from '../data/regions';
 
 export const TILE = 64;
@@ -115,7 +116,8 @@ export default class FieldScene extends Phaser.Scene {
     } else if (ch === 'T') {
       const h = tileHash(x + 31, y + 17);
       const pine = h % 3 === 0;
-      const t = putObject(this, pine ? 'p-tree-pine' : 'p-tree', cx, bottom + 6, TILE * (1.14 + (h % 4) * 0.05));
+      // 木は「そのマスに立つキャラより奥」に描く（森の中に入っても主人公が隠れない）
+      const t = putObject(this, pine ? 'p-tree-pine' : 'p-tree', cx, bottom + 6, TILE * (1.14 + (h % 4) * 0.05), { depthOffset: -(TILE - 10) });
       if (t) { t.setFlipX((h >> 2) % 2 === 0); t.setTint(shade(0xffffff, -((h >> 4) % 18))); }
     } else if (ch === 'C') {
       putObject(this, 'p-castle', cx, bottom + 2, TILE * 1.72);
@@ -778,6 +780,7 @@ export default class FieldScene extends Phaser.Scene {
     }
     let rate = ENCOUNTER_RATE[ch] ?? 0;
     rate = Math.max(0.02, rate * (1 - 0.1 * gameState.player.quick));
+    if (debugNoEncounter()) rate = 0;
     if (Math.random() < rate) {
       const region = this.currentRegion();
       this.enterBattle(ch, this.regionDanger(), region ? region.pool : null);

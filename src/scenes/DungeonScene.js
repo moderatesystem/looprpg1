@@ -7,6 +7,7 @@ import { startBgm, stopBgm, jingle, toggleMute } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
 import { preloadTiles, putTile, tileHash } from '../game/tileArt';
 import { createActor, moveActor, destroyActor } from '../game/actors';
+import { debugNoEncounter } from '../game/debug';
 import { beep, TILE, copperCount } from './FieldScene';
 
 // 坑道（複層）。凡例 #:壁 .:床 S:入口（キャンプに戻る） H:宝箱 B:ボス床
@@ -324,7 +325,7 @@ export default class DungeonScene extends Phaser.Scene {
     }
     if (Date.now() < gameState.encounterGraceUntil) return;
     const cfg = this.floorCfg();
-    const rate = Math.max(0.02, cfg.rate * (1 - 0.1 * gameState.player.quick));
+    const rate = debugNoEncounter() ? 0 : Math.max(0.02, cfg.rate * (1 - 0.1 * gameState.player.quick));
     if (Math.random() < rate) this.enterBattle(false);
   }
 

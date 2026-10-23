@@ -6,6 +6,7 @@ import { preloadEnemyArt, drawEnemyArt } from '../game/enemyArt';
 import { preloadTiles, putTile } from '../game/tileArt';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
 import { startBgm, stopBgm, beep, jingle } from '../game/sound';
+import { debugInvincible } from '../game/debug';
 
 // DQ1風：戦闘はフィールドと完全分離した別画面
 // メッセージはキュー制（Z送り／自動送り）で「間」を作る
@@ -235,6 +236,11 @@ export default class BattleScene extends Phaser.Scene {
     }
     if (Math.random() < p.evadeChance) {
       this.say('しかし 勇者はかわした！');
+      this.refresh();
+      return;
+    }
+    if (debugInvincible()) {
+      this.say(`${e.name}の攻撃！ しかし 無敵でダメージを受けない！`);
       this.refresh();
       return;
     }
