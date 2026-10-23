@@ -183,7 +183,7 @@ export default class TownScene extends Phaser.Scene {
           }
         }
         if (ch === 'T') {
-          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18, { shadowScale: 0.44 })) {
+          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18)) {
             m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
           }
         }
@@ -193,12 +193,12 @@ export default class TownScene extends Phaser.Scene {
           }
         }
         if (ch === 'P') {
-          if (!putObject(this, 'p-pot', cx, bottom, 46, { shadowScale: 0.5 })) {
+          if (!putObject(this, 'p-pot', cx, bottom, 46)) {
             m.fillStyle(0x8d5a2b, 1); m.fillRect(px + 18, py + 22, 28, 26);
           }
         }
         if (ch === 'N') {
-          if (!putObject(this, 'p-sign', cx, bottom, 44, { shadowScale: 0.42 })) {
+          if (!putObject(this, 'p-sign', cx, bottom, 44)) {
             m.fillStyle(0x6e3e1c, 1); m.fillRect(px + 26, py + 14, 12, 36);
           }
         }

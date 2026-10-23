@@ -110,19 +110,19 @@ export default class FieldScene extends Phaser.Scene {
     // 立体オブジェクト（奥行きで前後関係を付ける）
     if (ch === '#') {
       const h = tileHash(x + 7, y + 13);
-      const m = putObject(this, 'p-rock-mountain', cx, bottom + 12, TILE * (1.06 + (h % 5) * 0.05), { shadowScale: 0.58 });
+      const m = putObject(this, 'p-rock-mountain', cx, bottom + 12, TILE * (1.06 + (h % 5) * 0.05));
       if (m) { m.setFlipX((h >> 3) % 2 === 0); m.setTint(shade(0xffffff, -((h >> 5) % 22))); }
     } else if (ch === 'T') {
       const h = tileHash(x + 31, y + 17);
       const pine = h % 3 === 0;
-      const t = putObject(this, pine ? 'p-tree-pine' : 'p-tree', cx, bottom + 6, TILE * (1.14 + (h % 4) * 0.05), { shadowScale: 0.44 });
+      const t = putObject(this, pine ? 'p-tree-pine' : 'p-tree', cx, bottom + 6, TILE * (1.14 + (h % 4) * 0.05));
       if (t) { t.setFlipX((h >> 2) % 2 === 0); t.setTint(shade(0xffffff, -((h >> 4) % 18))); }
     } else if (ch === 'C') {
-      putObject(this, 'p-castle', cx, bottom + 2, TILE * 1.72, { shadowScale: 0.56 });
+      putObject(this, 'p-castle', cx, bottom + 2, TILE * 1.72);
     } else if (ch === 'V') {
-      putObject(this, 'p-house', cx, bottom + 2, TILE * 1.34, { shadowScale: 0.52 });
+      putObject(this, 'p-house', cx, bottom + 2, TILE * 1.34);
     } else if (ch === 'D') {
-      putObject(this, 'p-mine', cx, bottom + 2, TILE * 1.16, { shadowScale: 0.5 });
+      putObject(this, 'p-mine', cx, bottom + 2, TILE * 1.16);
     }
     // 草原の小物デカール（同じ絵の繰り返し感を消す）
     if (ch === '.' || ch === 'S') {
