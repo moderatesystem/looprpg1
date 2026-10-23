@@ -63,6 +63,7 @@ export function startBgm(kind) {
   bgmStep = 0;
   try {
     bgmTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const f = bgm.notes[bgmStep % bgm.notes.length];
       bgmStep += 1;
       if (f > 0) beep(f, bgm.step * 0.9, 'triangle', 0.010);

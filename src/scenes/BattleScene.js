@@ -287,6 +287,7 @@ export default class BattleScene extends Phaser.Scene {
     const gold = Math.floor(this.enemy.gold * (1 + p.goldBonus));
     p.exp += exp;
     p.gold += gold;
+    stopBgm();
     jingle('victory');
     this.refresh();
     let ups = 0;
