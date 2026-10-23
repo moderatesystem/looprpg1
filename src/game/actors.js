@@ -23,24 +23,27 @@ export function ensureActorTextures(scene) {
 }
 
 // 建物・木・岩などの接地影（静止オブジェクト用）
-export function addPropShadow(scene, cx, bottomY, width) {
+export function addPropShadow(scene, cx, bottomY, width, alpha = 0.30) {
   if (!scene.textures.exists(PROP_SHADOW_TEX)) ensureActorTextures(scene);
   return scene.add.image(cx, bottomY, PROP_SHADOW_TEX)
-    .setDisplaySize(width, width * 0.34)
-    .setAlpha(0.26)
+    .setDisplaySize(width, width * 0.28)
+    .setAlpha(alpha)
     .setDepth(bottomY - 2);
 }
 
 // キャラクター生成。px,py は「立っているマスの中心」のピクセル座標
+// 画像は足元が接地するよう原点を下端にし、接地影を足元へ密着させる
 export function createActor(scene, px, py, key, size = 46) {
   ensureActorTextures(scene);
-  const shadow = scene.add.image(px, py + size * 0.34, SHADOW_TEX)
-    .setDisplaySize(size * 0.95, size * 0.36)
-    .setAlpha(0.34)
-    .setDepth(py - 1);
-  const img = scene.add.image(px, py - size * 0.06, key).setDisplaySize(size, size);
-  img.setDepth(py);
-  const actor = { img, shadow, size, px, py, label: null };
+  const groundY = py + size * 0.40;
+  const shadow = scene.add.image(px, groundY - 1, SHADOW_TEX)
+    .setDisplaySize(size * 0.62, size * 0.20)
+    .setAlpha(0.42)
+    .setDepth(groundY - 2);
+  const img = scene.add.image(px, groundY, key).setOrigin(0.5, 1);
+  img.setScale(size / img.height);
+  img.setDepth(groundY - 1);
+  const actor = { img, shadow, size, px, py, groundY, label: null };
   startIdle(scene, actor);
   return actor;
 }
@@ -51,11 +54,11 @@ function stopIdle(actor) {
 
 export function startIdle(scene, actor) {
   stopIdle(actor);
-  const base = actor.img.y;
+  const base = actor.groundY;
   actor.idle = scene.tweens.add({
     targets: actor.img,
-    y: base - 1.8,
-    duration: 1300,
+    y: base - 1.2,
+    duration: 1400,
     yoyo: true,
     repeat: -1,
     ease: 'Sine.easeInOut',
@@ -78,7 +81,7 @@ export function destroyActor(actor) {
 export function setActorLabel(scene, actor, text, size = 46) {
   if (!actor) return;
   if (actor.label) actor.label.destroy();
-  actor.label = scene.add.text(actor.px - 18, actor.py - size * 0.92, text, {
+  actor.label = scene.add.text(actor.px - 18, actor.py - size * 0.98, text, {
     fontSize: '12px', color: '#fff', backgroundColor: '#000000cc',
     padding: { x: 3, y: 1 }, fontFamily: "'DotGothic16', monospace",
   }).setDepth(9000);
@@ -91,23 +94,24 @@ export function moveActor(scene, actor, px, py, dx, dy, duration = 140, onDone =
   faceActor(actor, dx);
   stopIdle(actor);
   const { img, shadow, label, size } = actor;
+  const groundY = py + size * 0.40;
+  actor.groundY = groundY;
   scene.tweens.killTweensOf([img, shadow, label].filter(Boolean));
-  const imgY = py - size * 0.06;
-  img.setDepth(py);
-  shadow.setDepth(py - 1);
-  scene.tweens.add({ targets: shadow, x: px, y: py + size * 0.34, duration, ease: 'Sine.easeInOut' });
-  if (label) scene.tweens.add({ targets: label, x: px - 18, y: py - size * 0.92, duration, ease: 'Sine.easeInOut' });
+  img.setDepth(groundY - 1);
+  shadow.setDepth(groundY - 2);
+  scene.tweens.add({ targets: shadow, x: px, y: groundY - 1, duration, ease: 'Sine.easeInOut' });
+  if (label) scene.tweens.add({ targets: label, x: px - 18, y: py - size * 0.98, duration, ease: 'Sine.easeInOut' });
   // 歩幅のつぶれ（接地で少し潰れ、持ち上がりで伸びる）
   const sx = Math.abs(img.scaleX) || 1;
   const sy = Math.abs(img.scaleY) || 1;
   scene.tweens.add({
     targets: img,
     x: px,
-    y: imgY,
+    y: groundY,
     duration,
     ease: 'Sine.easeInOut',
     onComplete: () => {
-      img.y = imgY;
+      img.y = groundY;
       img.setScale(sx, sy);
       startIdle(scene, actor);
       if (onDone) onDone();
@@ -115,8 +119,8 @@ export function moveActor(scene, actor, px, py, dx, dy, duration = 140, onDone =
   });
   scene.tweens.add({
     targets: img,
-    scaleY: sy * 1.08,
-    scaleX: sx * 0.94,
+    scaleY: sy * 1.06,
+    scaleX: sx * 0.96,
     duration: duration * 0.45,
     yoyo: true,
     ease: 'Sine.easeInOut',

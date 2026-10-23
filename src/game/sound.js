@@ -3,20 +3,59 @@ let actx = null;
 let master = null;
 let bgmTimer = null;
 let bgmStep = 0;
+let bgmKind = null;
+let muted = false;
+try { muted = localStorage.getItem('looprpg-muted') === '1'; } catch (e) { /* no storage */ }
 
 function ac() {
   if (!actx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     actx = new AC();
     master = actx.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = muted ? 0 : 0.5;
     master.connect(actx.destination);
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
 
+export function isMuted() { return muted; }
+
+export function setMuted(v) {
+  muted = !!v;
+  try { localStorage.setItem('looprpg-muted', muted ? '1' : '0'); } catch (e) { /* noop */ }
+  if (master) master.gain.value = muted ? 0 : 0.5;
+  if (muted) {
+    if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+  } else if (bgmKind) {
+    startBgm(bgmKind);
+  }
+  return muted;
+}
+
+export function toggleMute() { return setMuted(!muted); }
+
+// タブが隠れたら必ず無音（復帰時に元のBGMへ戻す）
+function onVisibility() {
+  if (typeof document === 'undefined') return;
+  if (document.hidden) {
+    if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+    try { if (actx && actx.state === 'running') actx.suspend(); } catch (e) { /* noop */ }
+  } else if (actx && !muted) {
+    try { actx.resume(); } catch (e) { /* noop */ }
+    if (bgmKind && !bgmTimer) startBgm(bgmKind);
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('pagehide', () => {
+    if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+    try { if (actx) actx.suspend(); } catch (e) { /* noop */ }
+  });
+}
+
 export function beep(freq = 440, ms = 70, type = 'square', vol = 0.04) {
+  if (muted) return;
   try {
     const c = ac();
     const o = c.createOscillator();
@@ -44,6 +83,7 @@ const JINGLES = {
 };
 
 export function jingle(name) {
+  if (muted) return;
   const notes = JINGLES[name] || [440];
   notes.forEach((f, i) => {
     setTimeout(() => beep(f, 110, 'square', 0.05), i * 100);
@@ -58,11 +98,14 @@ const BGMS = {
 
 export function startBgm(kind) {
   stopBgm();
+  bgmKind = kind;
   const bgm = BGMS[kind];
-  if (!bgm) return;
+  if (!bgm || muted) return;
+  if (typeof document !== 'undefined' && document.hidden) return;
   bgmStep = 0;
   try {
     bgmTimer = setInterval(() => {
+      if (muted) return;
       if (typeof document !== 'undefined' && document.hidden) return;
       const f = bgm.notes[bgmStep % bgm.notes.length];
       bgmStep += 1;
@@ -73,4 +116,11 @@ export function startBgm(kind) {
 
 export function stopBgm() {
   if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+  bgmKind = null;
+}
+
+// 画面遷移時の保険：予約済みの音も含めて即座に止める
+export function silenceAll() {
+  if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+  try { if (actx && actx.state === 'running') actx.suspend(); } catch (e) { /* noop */ }
 }

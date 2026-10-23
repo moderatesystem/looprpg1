@@ -3,7 +3,7 @@ import DIALOGUES from '../data/dialogues.json';
 import { gameState, takeLegacy, generateVeins } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
-import { startBgm, stopBgm, jingle } from '../game/sound';
+import { startBgm, stopBgm, jingle, toggleMute } from '../game/sound';
 import { preloadCharArt, drawHeroFigure } from '../game/charArt';
 import { preloadTiles, putTile, tileHash } from '../game/tileArt';
 import { createActor, moveActor, destroyActor } from '../game/actors';
@@ -229,6 +229,11 @@ export default class DungeonScene extends Phaser.Scene {
   handleKey(e) {
     if (e.repeat) return;
     const k = e.key;
+    if (k === 'm' || k === 'M') {
+      const m = toggleMute();
+      this.setMessage(m ? '音を消した（Mで元に戻す）' : '音を出した');
+      return;
+    }
     if (k === 't' || k === 'T') {
       if (!this.cmdLock) toggleStatus();
       return;

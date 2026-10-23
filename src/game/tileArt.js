@@ -60,8 +60,8 @@ export function putTile(scene, key, cx, cy, size) {
 export function putObject(scene, key, cx, bottomY, size, opts = {}) {
   if (!scene.textures.exists(key)) return null;
   const depth = bottomY + (opts.depthOffset || 0);
-  const shadowW = size * (opts.shadowScale ?? 0.62);
-  addPropShadow(scene, cx, bottomY - size * 0.02, shadowW).setDepth(depth - 2);
+  const shadowW = size * (opts.shadowScale ?? 0.5);
+  addPropShadow(scene, cx, bottomY - size * 0.015, shadowW, opts.shadowAlpha ?? 0.30).setDepth(depth - 2);
   const img = scene.add.image(cx, bottomY, key).setOrigin(0.5, 1);
   img.setDisplaySize(size, size);
   img.setDepth(depth);

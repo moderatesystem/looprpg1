@@ -3,7 +3,7 @@ import DIALOGUES from '../data/dialogues.json';
 import { gameState, saveGame, loadMeta, startNextLoop } from '../game/state';
 import { applyTrait } from '../data/traits';
 import { toggleStatus, isStatusOpen } from '../game/statusUi';
-import { startBgm, stopBgm, jingle } from '../game/sound';
+import { startBgm, stopBgm, jingle, toggleMute } from '../game/sound';
 import { preloadCharArt, drawHeroFigure, npcKey } from '../game/charArt';
 import { preloadTiles, putTile, putObject, tileHash } from '../game/tileArt';
 import { createActor, moveActor, destroyActor, setActorLabel, setupWander, stopWander, turnTo } from '../game/actors';
@@ -183,7 +183,7 @@ export default class TownScene extends Phaser.Scene {
           }
         }
         if (ch === 'T') {
-          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18, { shadowScale: 0.64 })) {
+          if (!putObject(this, 'p-tree', cx, bottom + 4, TILE * 1.18, { shadowScale: 0.44 })) {
             m.fillStyle(0x2f6b2a, 1); m.fillRect(px + 14, py + 16, 36, 32);
           }
         }
@@ -326,6 +326,11 @@ export default class TownScene extends Phaser.Scene {
   handleKey(e) {
     if (e.repeat) return;
     const k = e.key;
+    if (k === 'm' || k === 'M') {
+      const m = toggleMute();
+      this.setMessage(m ? '音を消した（Mで元に戻す）' : '音を出した');
+      return;
+    }
     if (k === 't' || k === 'T') {
       if (!this.talk && !this.cmdLock) toggleStatus();
       return;
