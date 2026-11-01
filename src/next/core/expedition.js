@@ -12,6 +12,7 @@ export function createRun(meta, party) {
     party: party || createParty(meta),
     scout: Math.min(4, (meta.scout || 0) + (meta.intel || 0)),
     intelUsed: meta.intel || 0,
+    asc: Math.min(5, Math.max(0, meta.ascension || 0)),
     kind: null,
     enc: null,
     bossDefeated: false,
@@ -35,16 +36,19 @@ export const NODE_LABEL = {
   boss: { icon: '☠', name: '深部の主', desc: '奥から重い気配がする。' },
 };
 
-export function battleLoot(node) {
+export function battleLoot(node, asc = 0) {
+  const mult = 1 + 0.2 * asc;
+  const base = 1 + Math.floor(Math.random() * 3) + Math.floor(node / 2);
   return {
-    copper: 1 + Math.floor(Math.random() * 3) + Math.floor(node / 2),
+    copper: Math.max(1, Math.round(base * mult)),
     relic: 0,
   };
 }
 
-export function treasureLoot() {
-  if (Math.random() < 0.35) return { copper: 0, relic: 1 };
-  return { copper: 2 + Math.floor(Math.random() * 3), relic: 0 };
+export function treasureLoot(asc = 0) {
+  const mult = 1 + 0.2 * asc;
+  if (Math.random() < 0.35 + 0.03 * asc) return { copper: 0, relic: 1 };
+  return { copper: Math.max(1, Math.round((2 + Math.floor(Math.random() * 3)) * mult)), relic: 0 };
 }
 
 export function addLoot(run, loot) {
@@ -62,13 +66,22 @@ export function finishRun(meta, run, { status }) {
   next.days += 1;
   next.runs += 1;
   if (run.node > next.bestDepth) next.bestDepth = run.node;
+  let earned = 0;
   if (status === 'win') {
-    next.gold += lootGold(run);
+    earned = lootGold(run);
+    next.gold += earned;
     next.clears += 1;
   } else if (status === 'lose') {
-    next.gold += Math.floor(lootGold(run) * 0.3);
+    earned = Math.floor(lootGold(run) * 0.3);
+    next.gold += earned;
   } else {
-    next.gold += lootGold(run);
+    earned = lootGold(run);
+    next.gold += earned;
   }
+  next.totalEarned = (next.totalEarned || 0) + earned;
+  if (earned > (next.bestCarry || 0)) next.bestCarry = earned;
+  next.lastResult = { status, depth: run.node, earned, days: next.days, asc: run.asc || 0 };
   return next;
 }
+
+export const RESULT_LABEL = { win: '制覇', lose: '全滅', retreat: '撤退' };

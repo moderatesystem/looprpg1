@@ -338,3 +338,33 @@ html, body {
 .tactic-desc { font-size: 11px; color: var(--dim); text-align: center; margin-top: -2px; }
 
 .cmd-grid .span2 { grid-column: 1 / -1; }
+
+/* ---------- 遠征結果・記録 ---------- */
+.result-line { font-size: 13px; color: var(--gold); text-align: center; }
+.record-line { font-size: 11px; color: var(--dim); text-align: center; }
+
+/* ---------- 戦闘演出：ダメージ数字・振動 ---------- */
+.enemy, .pcard { position: relative; }
+.dmg-float {
+  position: absolute; top: -6px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px; font-weight: bold; color: #ff6b6b;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+  pointer-events: none;
+  animation: dmg-rise .9s ease-out forwards;
+}
+.dmg-float.heal { color: var(--hp); }
+@keyframes dmg-rise {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.6); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+  30% { transform: translate(-50%, -4px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -28px) scale(1); }
+}
+.enemy.shake { animation: hit-shake .3s; }
+.pcard.shake { animation: hit-shake .3s; }
+@keyframes hit-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}

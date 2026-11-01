@@ -2,11 +2,11 @@
 import {
   ROSTER, loadMeta, saveMeta, SCOUT_TIERS, scoutUpgradeCost, canUpgradeScout,
   memberById, equipOf, weaponCost, armorCost, EQUIP_MAX, statsWithEquip,
-  ITEMS, INTEL_COST,
+  ITEMS, INTEL_COST, ASCENSION, ascensionOf, canRaiseAscension,
 } from '../core/state.js';
 import {
   createRun, nodeKind, NODE_LABEL, NODES,
-  battleLoot, treasureLoot, addLoot, lootGold, finishRun,
+  battleLoot, treasureLoot, addLoot, lootGold, finishRun, RESULT_LABEL,
 } from '../core/expedition.js';
 import { buildEncounter, scoutReport, scoutChoices } from '../core/enemies.js';
 import { initBattle, resolveRound, aliveParty, aliveFoes, planRound, TACTICS } from '../core/battle.js';
@@ -46,6 +46,7 @@ function hud() {
     <span>日数 <b>${meta.days}</b></span>
     <span class="gold">G <b>${meta.gold}</b></span>
     <span>斥候 <b>${meta.scout}</b></span>
+    <span>A <b>${meta.ascension || 0}</b></span>
     <span class="spacer"></span>
     <button class="tag" data-act="mute">${isMuted() ? '🔇 音OFF' : '🔊 音ON'}</button>
   </div>`;
@@ -126,6 +127,8 @@ function itemTab() {
 function infoTab() {
   const cost = scoutUpgradeCost(meta);
   const pips = [1, 2, 3, 4].map((i) => `<i class="${meta.scout >= i ? 'on' : ''}"></i>`).join('');
+  const asc = ascensionOf(meta);
+  const canUp = canRaiseAscension(meta);
   return `<div class="info-block">
     <div class="scout-row">
       <div class="scout-pips">${pips}</div>
@@ -136,11 +139,30 @@ function infoTab() {
     </button>
   </div>
   <div class="info-block">
+    <div class="name">${asc.name} <span class="role">現在 A${asc.level}</span></div>
+    <div class="pstat">${asc.desc}。上げるにはこの段階での制覇が必要（制覇 ${meta.clears}回）。</div>
+    <div class="btn-row">
+      <button class="btn" data-act="asc-up" ${canUp ? '' : 'disabled'}>上げる</button>
+      <button class="btn ghost" data-act="asc-down" ${(meta.ascension || 0) > 0 ? '' : 'disabled'}>下げる</button>
+    </div>
+  </div>
+  <div class="info-block">
     <div class="name">情報収集 <span class="role">次の遠征 +${meta.intel || 0}</span></div>
     <div class="pstat">1回の遠征だけ斥候値を上げる（${INTEL_COST}G・最大+3）</div>
     <button class="btn" data-act="buy-intel" ${(meta.intel || 0) >= 3 || meta.gold < INTEL_COST ? 'disabled' : ''}>情報を買う（${INTEL_COST}G）</button>
   </div>
   <p class="hint">情報は出発時に消費されます。</p>`;
+}
+
+function resultBanner() {
+  const r = meta.lastResult;
+  if (!r) return '';
+  const label = RESULT_LABEL[r.status] || r.status;
+  return `<div class="panel result-line">前回：${label} / 深度${r.depth} / +${r.earned}G / ${r.days}日目（A${r.asc || 0}）</div>`;
+}
+
+function recordLine() {
+  return `<div class="record-line">最深 ${meta.bestDepth} / 最大持ち帰り ${meta.bestCarry || 0}G / 制覇 ${meta.clears} / 遠征 ${meta.runs}回</div>`;
 }
 
 function villageHtml() {
@@ -153,6 +175,8 @@ function villageHtml() {
     <h1 class="title">遠征隊</h1>
     <p class="subtitle">村で整えて、坑道へ。深く潜るほど報酬も危険も増える。</p>
   </div>
+  ${resultBanner()}
+  ${recordLine()}
   <div class="tabs">
     ${tabs.map(([k, label]) => `<button class="tabbtn ${tab === k ? 'active' : ''}" data-act="tab" data-tab="${k}">${label}</button>`).join('')}
   </div>
@@ -181,6 +205,7 @@ function lootLine() {
     <span>銅 <b>${run.loot.copper}</b></span>
     <span>遺物 <b>${run.loot.relic}</b></span>
     <span>換金 <b>${lootGold(run)}G</b></span>
+    <span>A${run.asc || 0}</span>
   </div>`;
 }
 
@@ -262,22 +287,26 @@ function currentActor() {
 
 function battleHtml() {
   const back = run.node >= 3 ? 'assets/battle/cave.png' : 'assets/battle/field.png';
+  const fxFor = (side, id) => (bs.fx || []).filter((f) => f.side === side && f.id === id);
+  const hitIds = new Set((bs.fx || []).filter((f) => f.kind === 'dmg').map((f) => `${f.side}:${f.id}`));
   const foes = bs.foes.map((f) => `
-    <div class="enemy ${f.hp <= 0 ? 'dead' : ''} ${bui.targetId === f.id ? 'selected' : ''} ${f.hp > 0 ? 'selectable' : ''}"
+    <div class="enemy ${f.hp <= 0 ? 'dead' : ''} ${bui.targetId === f.id ? 'selected' : ''} ${f.hp > 0 ? 'selectable' : ''} ${hitIds.has(`foe:${f.id}`) ? 'shake' : ''}"
          data-act="target" data-id="${f.id}">
       <img src="${f.img}" alt="">
       <div class="ename">${esc(f.name)}</div>
       <div class="ehp"><i style="width:${pct(f.hp, f.maxHp)}%"></i></div>
+      ${fxFor('foe', f.id).map((x) => `<div class="dmg-float">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
     </div>`).join('');
 
   const party = bs.party.map((p) => `
-    <div class="pcard ${p.hp <= 0 ? 'down' : ''} ${currentActor() && currentActor().id === p.id ? 'active' : ''}">
+    <div class="pcard ${p.hp <= 0 ? 'down' : ''} ${currentActor() && currentActor().id === p.id ? 'active' : ''} ${hitIds.has(`party:${p.id}`) ? 'shake' : ''}">
       <img src="${p.img}" alt="">
       <div>
         <div class="pname">${p.name}</div>
         <div class="bar ${p.hp / p.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(p.hp, p.maxHp)}%"></i></div>
         <div class="pstat">HP ${p.hp}/${p.maxHp}${p.skill && p.skill.id !== 'cover' ? ` ・技${p.skillUses}` : ''}</div>
       </div>
+      ${fxFor('party', p.id).map((x) => `<div class="dmg-float ${x.kind === 'heal' ? 'heal' : ''}">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
     </div>`).join('');
 
   const actor = currentActor();
@@ -297,7 +326,7 @@ function battleHtml() {
   <div class="log">${bs.log.map((l) => `<div>${esc(l)}</div>`).join('')}</div>
 
   <div class="actor-line">
-    ${actor ? `${actor.name} の番（${bui.idx + 1}/${bui.order.length}）` : '解決中…'}
+    R${bs.round} ${actor ? `${actor.name} の番（${bui.idx + 1}/${bui.order.length}）` : '解決中…'}
     <small>${manual ? '敵をタップで対象選択' : '作戦実行でラウンドを進めます'}</small>
   </div>
 
@@ -356,7 +385,7 @@ function goVillage(status) {
 function enterNode() {
   if (!run) return;
   run.kind = run.node >= NODES ? 'boss' : nodeKind(run);
-  run.enc = (run.kind === 'battle' || run.kind === 'boss') ? buildEncounter(run.node, run.kind === 'boss') : null;
+  run.enc = (run.kind === 'battle' || run.kind === 'boss') ? buildEncounter(run.node, run.kind === 'boss', run.asc || 0) : null;
   run.resolved = false;
   view = 'node';
   overlay = null;
@@ -396,14 +425,14 @@ function afterRound(res) {
   syncItems();
   if (res.status === 'win') {
     const isBoss = run.kind === 'boss';
-    if (!isBoss) addLoot(run, battleLoot(run.node));
+    if (!isBoss) addLoot(run, battleLoot(run.node, run.asc || 0));
     run.party = bs.party.map((p) => ({ ...p, guard: false }));
     sfx('win');
     overlay = {
       title: isBoss ? '深部の主を倒した' : '勝利',
       cls: 'win',
       text: isBoss
-        ? `遠征成功！ 持ち帰り ${lootGold(run)}G`
+        ? `遠征成功！ 持ち帰り ${lootGold(run)}G（${run.node}層・A${run.asc || 0}）`
         : `戦利品を手に入れた（銅 ${run.loot.copper} / 遺物 ${run.loot.relic}）`,
       acts: [{ act: 'overlay-continue', label: isBoss ? '村へ帰還' : '先へ進む', cls: 'primary' }],
     };
@@ -509,6 +538,23 @@ function onAct(act, el) {
       render();
       return;
     }
+    if (act === 'asc-up') {
+      if (!canRaiseAscension(meta)) { toast('制覇が足りない'); return; }
+      meta.ascension = Math.min(5, (meta.ascension || 0) + 1);
+      saveMeta(meta);
+      sfx('skill');
+      toast(`${ASCENSION[meta.ascension].name}へ`);
+      render();
+      return;
+    }
+    if (act === 'asc-down') {
+      if ((meta.ascension || 0) <= 0) return;
+      meta.ascension -= 1;
+      saveMeta(meta);
+      toast(`${ASCENSION[meta.ascension].name}へ`);
+      render();
+      return;
+    }
     if (act === 'upgrade') {
       const cost = scoutUpgradeCost(meta);
       if (!canUpgradeScout(meta)) { toast('Gが足りない'); return; }
@@ -540,7 +586,7 @@ function onAct(act, el) {
     if (act === 'next') { nextNode(); return; }
     if (act === 'retreat') { goVillage('retreat'); return; }
     if (act === 'open') {
-      addLoot(run, treasureLoot());
+      addLoot(run, treasureLoot(run.asc || 0));
       run.resolved = true; sfx('skill');
       toast('宝箱を開けた'); render(); return;
     }
@@ -689,7 +735,7 @@ if (jump === 'battle' || jump === 'node' || jump === 'nodebattle') {
   if (run) {
     if (jump === 'battle' || jump === 'nodebattle') {
       run.kind = 'battle';
-      run.enc = buildEncounter(run.node, false);
+      run.enc = buildEncounter(run.node, false, run.asc || 0);
       run.resolved = false;
       if (jump === 'battle') beginBattle();
       else { view = 'node'; overlay = null; render(); }

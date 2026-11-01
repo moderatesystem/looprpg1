@@ -13,6 +13,7 @@ export function initBattle({ party, foes, opts = {}, items = {} }) {
     ambush: !!opts.ambush,
     weakpoint: !!opts.weakpoint,
     log: [],
+    fx: [],
   };
 }
 
@@ -32,12 +33,14 @@ function damageTo(target, raw, mult = 1) {
 function hitFoe(b, foe, dmg, label) {
   foe.hp = Math.max(0, foe.hp - dmg);
   b.log.push(`${label} ${foe.name}に ${dmg} ダメージ`);
+  b.fx.push({ side: 'foe', id: foe.id, dmg, kind: 'dmg' });
   if (foe.hp <= 0) b.log.push(`${foe.name}を倒した！`);
 }
 
 function hitParty(b, member, dmg, label) {
   member.hp = Math.max(0, member.hp - dmg);
   b.log.push(`${label} ${member.name}に ${dmg} ダメージ`);
+  b.fx.push({ side: 'party', id: member.id, dmg, kind: 'dmg' });
   if (member.hp <= 0) b.log.push(`${member.name}は倒れた…`);
 }
 
@@ -54,6 +57,7 @@ function useItem(b, actor, itemId) {
     const amt = Math.min(t.maxHp - t.hp, 15);
     t.hp += amt;
     b.log.push(`${actor.name}はやくそうを使った ${t.name}のHPが ${amt} 回復`);
+    b.fx.push({ side: 'party', id: t.id, dmg: amt, kind: 'heal' });
   } else if (itemId === 'revive') {
     if ((b.items.revive || 0) <= 0) { b.log.push('気付け薬がない'); return; }
     const downed = b.party.find((p) => p.hp <= 0);
@@ -61,6 +65,7 @@ function useItem(b, actor, itemId) {
     b.items.revive -= 1;
     downed.hp = Math.max(1, Math.floor(downed.maxHp * 0.3));
     b.log.push(`${actor.name}は気付け薬を使った ${downed.name}が復活！`);
+    b.fx.push({ side: 'party', id: downed.id, dmg: downed.hp, kind: 'heal' });
   }
 }
 
@@ -68,7 +73,8 @@ function useItem(b, actor, itemId) {
 export function resolveRound(b, actions) {
   const log = [];
   b.log = log;
-  if (b.status) return { log, status: b.status };
+  b.fx = [];
+  if (b.status) return { log, status: b.status, fx: b.fx };
 
   b.coverId = null;
   b.tauntId = null;
@@ -136,6 +142,7 @@ export function resolveRound(b, actions) {
             const amt = Math.min(t.maxHp - t.hp, 14);
             t.hp += amt;
             log.push(`${p.name}のいやし！ ${t.name}のHPが ${amt} 回復`);
+            b.fx.push({ side: 'party', id: t.id, dmg: amt, kind: 'heal' });
           }
         }
       } else if (sid === 'weak') {
@@ -161,7 +168,7 @@ export function resolveRound(b, actions) {
 
   if (aliveFoes(b).length === 0) {
     b.status = 'win';
-    return { log, status: b.status };
+    return { log, status: b.status, fx: b.fx };
   }
 
   // 敵の行動
@@ -206,14 +213,14 @@ export function resolveRound(b, actions) {
 
   if (aliveParty(b).length === 0) {
     b.status = 'lose';
-    return { log, status: b.status };
+    return { log, status: b.status, fx: b.fx };
   }
 
   b.round += 1;
   for (const p of b.party) p.guard = false;
   b.coverId = null;
   b.tauntId = null;
-  return { log, status: null };
+  return { log, status: null, fx: b.fx };
 }
 
 export function availableSkills(actor) {

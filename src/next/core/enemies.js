@@ -7,9 +7,11 @@ export function enemyImg(e) {
   return `assets/enemies/${e.art || e.id}.png`;
 }
 
-function foeFrom(base, depth, mod = 1) {
-  const hpScale = 1 + 0.16 * depth;
-  const atkScale = 1 + 0.10 * depth;
+function foeFrom(base, depth, mod = 1, asc = 0) {
+  const ascHp = 1 + 0.18 * asc;
+  const ascAtk = 1 + 0.12 * asc;
+  const hpScale = (1 + 0.16 * depth) * ascHp;
+  const atkScale = (1 + 0.10 * depth) * ascAtk;
   const maxHp = Math.max(6, Math.round(base.hp * hpScale * mod));
   return {
     id: base.id,
@@ -26,10 +28,10 @@ function foeFrom(base, depth, mod = 1) {
   };
 }
 
-// depth: 1..  n: ノード番号
-export function buildEncounter(depth, isBoss = false) {
+// depth: 1..  n: ノード番号 asc: アセンション 0..5
+export function buildEncounter(depth, isBoss = false, asc = 0) {
   if (isBoss) {
-    return { foes: [foeFrom({ ...BOSS, boss: true }, depth + 2, 1.1)], isBoss: true };
+    return { foes: [foeFrom({ ...BOSS, boss: true }, depth + 2, 1.1, asc)], isBoss: true };
   }
   const pool = byMinLv(Math.max(1, depth));
   const size = depth <= 1 ? (Math.random() < 0.55 ? 1 : 2)
@@ -38,7 +40,7 @@ export function buildEncounter(depth, isBoss = false) {
   const foes = [];
   for (let i = 0; i < size; i += 1) {
     const base = pool[Math.floor(Math.random() * pool.length)];
-    foes.push(foeFrom(base, depth));
+    foes.push(foeFrom(base, depth, 1, asc));
   }
   return { foes, isBoss: false };
 }

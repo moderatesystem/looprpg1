@@ -47,12 +47,34 @@ const DEFAULT_META = {
   scout: 0,
   clears: 0,
   bestDepth: 0,
+  bestCarry: 0,
+  totalEarned: 0,
+  ascension: 0,
   runs: 0,
   party: [...DEFAULT_PARTY],
   equip: {},
   items: { herb: 2, revive: 0 },
   intel: 0,
+  lastResult: null,
 };
+
+export const ASCENSION = [
+  { level: 0, name: 'A0 調査', enemy: 1.0, reward: 1.0, desc: 'まずは様子見' },
+  { level: 1, name: 'A1 深入', enemy: 1.18, reward: 1.2, desc: '敵+18% / 報酬+20%' },
+  { level: 2, name: 'A2 強行', enemy: 1.38, reward: 1.45, desc: '敵+38% / 報酬+45%' },
+  { level: 3, name: 'A3 苦境', enemy: 1.6, reward: 1.7, desc: '敵+60% / 報酬+70%' },
+  { level: 4, name: 'A4 極限', enemy: 1.85, reward: 2.0, desc: '敵+85% / 報酬2倍' },
+  { level: 5, name: 'A5 深淵', enemy: 2.15, reward: 2.4, desc: '敵2倍超 / 報酬2.4倍' },
+];
+
+export function ascensionOf(meta) {
+  return ASCENSION[Math.min(5, Math.max(0, meta.ascension || 0))];
+}
+
+// 次の段階へは今の段階での制覇が1回必要（累計制覇数 > 現在A）。下げるのはいつでも可
+export function canRaiseAscension(meta) {
+  return (meta.ascension || 0) < 5 && (meta.clears || 0) > (meta.ascension || 0);
+}
 
 export function loadMeta() {
   try {
@@ -65,6 +87,10 @@ export function loadMeta() {
       party: Array.isArray(d.party) && d.party.length ? d.party.slice(0, 4) : [...DEFAULT_PARTY],
       items: { ...DEFAULT_META.items, ...(d.items || {}) },
       equip: d.equip || {},
+      ascension: Math.min(5, Math.max(0, d.ascension || 0)),
+      bestCarry: d.bestCarry || 0,
+      totalEarned: d.totalEarned || 0,
+      lastResult: d.lastResult || null,
     };
     return m;
   } catch (e) {
