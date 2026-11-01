@@ -1,19 +1,16 @@
 {
   "name": "looprpg1",
-  "version": "1.0.0",
-  "description": "RPG game using Phaser 4",
-  "main": "src/index.js",
+  "version": "2.0.0",
+  "description": "遠征パーティRPG（DOM/CSS）",
+  "main": "src/next/main.js",
   "scripts": {
     "start": "webpack serve --mode development",
     "build": "webpack --mode production",
     "shot": "powershell -ExecutionPolicy Bypass -File scripts/shot.ps1"
-  },
-  "dependencies": {
-    "phaser": "^4.2.1"
   },
   "devDependencies": {
     "webpack": "^5.111.1",
     "webpack-cli": "^7.2.3",
     "webpack-dev-server": "^6.0.0"
   }
-} 
+}
