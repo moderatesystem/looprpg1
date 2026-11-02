@@ -6,6 +6,7 @@
   "scripts": {
     "start": "webpack serve --mode development",
     "build": "webpack --mode production",
+    "sim": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/sim.mjs",
     "shot": "powershell -ExecutionPolicy Bypass -File scripts/shot.ps1"
   },
   "devDependencies": {
