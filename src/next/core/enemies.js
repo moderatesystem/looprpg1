@@ -40,7 +40,10 @@ export function buildEncounter(depth, isBoss = false, asc = 0) {
   const foes = [];
   for (let i = 0; i < size; i += 1) {
     const base = pool[Math.floor(Math.random() * pool.length)];
-    foes.push(foeFrom(base, depth, 1, asc));
+    const foe = foeFrom(base, depth, 1, asc);
+    // 同種が複数出ても対象選択・演出を区別できるよう、識別子だけ一意にする
+    foe.id = `${base.id}-${i + 1}`;
+    foes.push(foe);
   }
   return { foes, isBoss: false };
 }

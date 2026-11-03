@@ -13,8 +13,22 @@ export function initBattle({ party, foes, opts = {}, items = {} }) {
     ambush: !!opts.ambush,
     weakpoint: !!opts.weakpoint,
     log: [],
-    fx: [],
+    events: [],
   };
+}
+
+// 1イベント＝ログ1行＋その時点のHP。UIはこれを順番に再生する
+function snapshotHp(b) {
+  const party = {};
+  for (const p of b.party) party[p.id] = p.hp;
+  const foe = {};
+  for (const f of b.foes) foe[f.id] = f.hp;
+  return { party, foe };
+}
+
+function emit(b, text, fx = null, sound = null) {
+  b.log.push(text);
+  b.events.push({ text, fx, sound, hp: snapshotHp(b) });
 }
 
 export const aliveParty = (b) => b.party.filter((p) => p.hp > 0);
@@ -32,16 +46,14 @@ function damageTo(target, raw, mult = 1) {
 
 function hitFoe(b, foe, dmg, label) {
   foe.hp = Math.max(0, foe.hp - dmg);
-  b.log.push(`${label} ${foe.name}に ${dmg} ダメージ`);
-  b.fx.push({ side: 'foe', id: foe.id, dmg, kind: 'dmg' });
-  if (foe.hp <= 0) b.log.push(`${foe.name}を倒した！`);
+  emit(b, `${label} ${foe.name}に ${dmg} ダメージ`, { side: 'foe', id: foe.id, dmg, kind: 'dmg' }, 'hit');
+  if (foe.hp <= 0) emit(b, `${foe.name}を倒した！`);
 }
 
 function hitParty(b, member, dmg, label) {
   member.hp = Math.max(0, member.hp - dmg);
-  b.log.push(`${label} ${member.name}に ${dmg} ダメージ`);
-  b.fx.push({ side: 'party', id: member.id, dmg, kind: 'dmg' });
-  if (member.hp <= 0) b.log.push(`${member.name}は倒れた…`);
+  emit(b, `${label}${member.name}に ${dmg} ダメージ`, { side: 'party', id: member.id, dmg, kind: 'dmg' }, 'hit');
+  if (member.hp <= 0) emit(b, `${member.name}は倒れた…`);
 }
 
 const lowestAlly = (b) => [...b.party]
@@ -50,31 +62,28 @@ const lowestAlly = (b) => [...b.party]
 
 function useItem(b, actor, itemId) {
   if (itemId === 'herb') {
-    if ((b.items.herb || 0) <= 0) { b.log.push('やくそうがない'); return; }
+    if ((b.items.herb || 0) <= 0) { emit(b, 'やくそうがない'); return; }
     const t = lowestAlly(b);
     if (!t) return;
     b.items.herb -= 1;
     const amt = Math.min(t.maxHp - t.hp, 15);
     t.hp += amt;
-    b.log.push(`${actor.name}はやくそうを使った ${t.name}のHPが ${amt} 回復`);
-    b.fx.push({ side: 'party', id: t.id, dmg: amt, kind: 'heal' });
+    emit(b, `${actor.name}はやくそうを使った ${t.name}のHPが ${amt} 回復`, { side: 'party', id: t.id, dmg: amt, kind: 'heal' }, 'heal');
   } else if (itemId === 'revive') {
-    if ((b.items.revive || 0) <= 0) { b.log.push('気付け薬がない'); return; }
+    if ((b.items.revive || 0) <= 0) { emit(b, '気付け薬がない'); return; }
     const downed = b.party.find((p) => p.hp <= 0);
-    if (!downed) { b.log.push('倒れている味方がいない'); return; }
+    if (!downed) { emit(b, '倒れている味方がいない'); return; }
     b.items.revive -= 1;
     downed.hp = Math.max(1, Math.floor(downed.maxHp * 0.3));
-    b.log.push(`${actor.name}は気付け薬を使った ${downed.name}が復活！`);
-    b.fx.push({ side: 'party', id: downed.id, dmg: downed.hp, kind: 'heal' });
+    emit(b, `${actor.name}は気付け薬を使った ${downed.name}が復活！`, { side: 'party', id: downed.id, dmg: downed.hp, kind: 'heal' }, 'heal');
   }
 }
 
 // actions: [{ actorId, type: 'attack'|'skill'|'guard'|'item', targetId, skillId, itemId }]
 export function resolveRound(b, actions) {
-  const log = [];
-  b.log = log;
-  b.fx = [];
-  if (b.status) return { log, status: b.status, fx: b.fx };
+  b.log = [];
+  b.events = [];
+  if (b.status) return { events: b.events, status: b.status };
 
   b.coverId = null;
   b.tauntId = null;
@@ -87,7 +96,7 @@ export function resolveRound(b, actions) {
         f.hp = Math.max(1, f.hp - d);
       }
     }
-    log.push('弱点を突いた！ 敵の体力が削れている');
+    emit(b, '弱点を突いた！ 敵の体力が削れている');
     b.weakpoint = false;
   }
 
@@ -98,13 +107,13 @@ export function resolveRound(b, actions) {
     if (a.type === 'guard') p.guard = true;
     if (a.type === 'skill' && a.skillId === 'cover') {
       b.coverId = p.id;
-      log.push(`${p.name}は味方をかばう構え`);
+      emit(b, `${p.name}は味方をかばう構え`);
     }
     if (a.type === 'skill' && a.skillId === 'taunt') {
       if (p.skillUses > 0) {
         p.skillUses -= 1;
         b.tauntId = p.id;
-        log.push(`${p.name}は敵の注意を引きつけた`);
+        emit(b, `${p.name}は敵の注意を引きつけた`);
       }
     }
   }
@@ -120,7 +129,7 @@ export function resolveRound(b, actions) {
       const raw = p.atk + rnd(-1, 2) - foe.def;
       hitFoe(b, foe, damageTo(foe, raw), `${p.name}の攻撃！`);
     } else if (a.type === 'guard') {
-      log.push(`${p.name}は身を守っている`);
+      emit(b, `${p.name}は身を守っている`);
     } else if (a.type === 'item') {
       useItem(b, p, a.itemId);
     } else if (a.type === 'skill') {
@@ -141,8 +150,7 @@ export function resolveRound(b, actions) {
           if (t) {
             const amt = Math.min(t.maxHp - t.hp, 14);
             t.hp += amt;
-            log.push(`${p.name}のいやし！ ${t.name}のHPが ${amt} 回復`);
-            b.fx.push({ side: 'party', id: t.id, dmg: amt, kind: 'heal' });
+            emit(b, `${p.name}のいやし！ ${t.name}のHPが ${amt} 回復`, { side: 'party', id: t.id, dmg: amt, kind: 'heal' }, 'heal');
           }
         }
       } else if (sid === 'weak') {
@@ -168,23 +176,23 @@ export function resolveRound(b, actions) {
 
   if (aliveFoes(b).length === 0) {
     b.status = 'win';
-    return { log, status: b.status, fx: b.fx };
+    return { events: b.events, status: b.status };
   }
 
   // 敵の行動
   if (b.ambush && b.round === 1) {
-    log.push('待ち伏せ成功！ 敵は動けない');
+    emit(b, '待ち伏せ成功！ 敵は動けない');
   } else {
     const bossAoe = b.foes.some((f) => f.boss) && b.round % 3 === 0;
     for (const foe of b.foes) {
       if (foe.hp <= 0) continue;
       if (foe.shy && Math.random() < 0.25) {
         foe.hp = 0;
-        log.push(`${foe.name}は逃げ出した`);
+        emit(b, `${foe.name}は逃げ出した`);
         continue;
       }
       if (bossAoe) {
-        log.push(`${foe.name}の大技！`);
+        emit(b, `${foe.name}の大技！`);
         for (const p of aliveParty(b)) {
           const raw = foe.atk * 0.8 + rnd(-1, 2) - p.def;
           const mult = p.guard ? 0.5 : 1;
@@ -202,25 +210,25 @@ export function resolveRound(b, actions) {
         if (cover && cover.hp > 0 && Math.random() < 0.85) {
           target = cover;
           mult = 0.6;
-          log.push(`${cover.name}が攻撃を受け止めた！`);
+          emit(b, `${cover.name}が攻撃を受け止めた！`);
         }
       }
       if (target.guard) mult *= 0.5;
       const raw = foe.atk + rnd(-1, 2) - target.def;
-      hitParty(b, target, damageTo(target, raw, mult), `${foe.name}の攻撃！`);
+      hitParty(b, target, damageTo(target, raw, mult), `${foe.name}の攻撃！ `);
     }
   }
 
   if (aliveParty(b).length === 0) {
     b.status = 'lose';
-    return { log, status: b.status, fx: b.fx };
+    return { events: b.events, status: b.status };
   }
 
   b.round += 1;
   for (const p of b.party) p.guard = false;
   b.coverId = null;
   b.tauntId = null;
-  return { log, status: null, fx: b.fx };
+  return { events: b.events, status: null };
 }
 
 export function availableSkills(actor) {

@@ -345,6 +345,7 @@ html, body {
 
 /* ---------- 戦闘演出：ダメージ数字・振動 ---------- */
 .enemy, .pcard { position: relative; }
+.log.clickable { cursor: pointer; }
 .dmg-float {
   position: absolute; top: -6px; left: 50%;
   transform: translateX(-50%);
@@ -356,9 +357,10 @@ html, body {
 .dmg-float.heal { color: var(--hp); }
 @keyframes dmg-rise {
   0% { opacity: 0; transform: translate(-50%, 8px) scale(.6); }
-  15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
-  30% { transform: translate(-50%, -4px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -28px) scale(1); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+  25% { transform: translate(-50%, -4px) scale(1); }
+  70% { opacity: 1; transform: translate(-50%, -20px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
 }
 .enemy.shake { animation: hit-shake .3s; }
 .pcard.shake { animation: hit-shake .3s; }

@@ -23,6 +23,14 @@ let bui = null;
 let overlay = null;
 let tab = 'party';
 
+// 戦闘演出のテンポ（ここだけ調整すれば速さが変わる）
+const TYPE_MS = 18;   // 文字送り: 1文字あたり
+const STEP_MS = 320;  // 1イベントの最低表示時間
+const STEP_PAD = 90;  // 文字送りが終わってから次へ移るまでの余白
+const FEED_MAX = 30;  // ログの保持行数
+let stepTimer = null;
+let typeTimer = null;
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pct = (hp, max) => Math.max(0, Math.min(100, Math.round((hp / max) * 100)));
 
@@ -287,27 +295,38 @@ function currentActor() {
 
 function battleHtml() {
   const back = run.node >= 3 ? 'assets/battle/cave.png' : 'assets/battle/field.png';
-  const fxFor = (side, id) => (bs.fx || []).filter((f) => f.side === side && f.id === id);
-  const hitIds = new Set((bs.fx || []).filter((f) => f.kind === 'dmg').map((f) => `${f.side}:${f.id}`));
-  const foes = bs.foes.map((f) => `
-    <div class="enemy ${f.hp <= 0 ? 'dead' : ''} ${bui.targetId === f.id ? 'selected' : ''} ${f.hp > 0 ? 'selectable' : ''} ${hitIds.has(`foe:${f.id}`) ? 'shake' : ''}"
+  const hpAt = (side, id, fallback) => {
+    const v = bui.view && bui.view[side];
+    return v && v[id] !== undefined ? v[id] : fallback;
+  };
+  const fxAt = (side, id) => (bui.fx && bui.fx.side === side && bui.fx.id === id ? [bui.fx] : []);
+  const isHit = (side, id) => !!(bui.fx && bui.fx.side === side && bui.fx.id === id && bui.fx.kind === 'dmg');
+
+  const foes = bs.foes.map((f) => {
+    const hp = hpAt('foe', f.id, f.hp);
+    return `
+    <div class="enemy ${hp <= 0 ? 'dead' : ''} ${!bui.playing && bui.targetId === f.id ? 'selected' : ''} ${hp > 0 && !bui.playing ? 'selectable' : ''} ${isHit('foe', f.id) ? 'shake' : ''}"
          data-act="target" data-id="${f.id}">
       <img src="${f.img}" alt="">
       <div class="ename">${esc(f.name)}</div>
-      <div class="ehp"><i style="width:${pct(f.hp, f.maxHp)}%"></i></div>
-      ${fxFor('foe', f.id).map((x) => `<div class="dmg-float">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
-    </div>`).join('');
+      <div class="ehp"><i style="width:${pct(hp, f.maxHp)}%"></i></div>
+      ${fxAt('foe', f.id).map((x) => `<div class="dmg-float">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
+    </div>`;
+  }).join('');
 
-  const party = bs.party.map((p) => `
-    <div class="pcard ${p.hp <= 0 ? 'down' : ''} ${currentActor() && currentActor().id === p.id ? 'active' : ''} ${hitIds.has(`party:${p.id}`) ? 'shake' : ''}">
+  const party = bs.party.map((p) => {
+    const hp = hpAt('party', p.id, p.hp);
+    return `
+    <div class="pcard ${hp <= 0 ? 'down' : ''} ${!bui.playing && currentActor() && currentActor().id === p.id ? 'active' : ''} ${isHit('party', p.id) ? 'shake' : ''}">
       <img src="${p.img}" alt="">
       <div>
         <div class="pname">${p.name}</div>
-        <div class="bar ${p.hp / p.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(p.hp, p.maxHp)}%"></i></div>
-        <div class="pstat">HP ${p.hp}/${p.maxHp}${p.skill && p.skill.id !== 'cover' ? ` ・技${p.skillUses}` : ''}</div>
+        <div class="bar ${hp / p.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(hp, p.maxHp)}%"></i></div>
+        <div class="pstat">HP ${hp}/${p.maxHp}${p.skill && p.skill.id !== 'cover' ? ` ・技${p.skillUses}` : ''}</div>
       </div>
-      ${fxFor('party', p.id).map((x) => `<div class="dmg-float ${x.kind === 'heal' ? 'heal' : ''}">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
-    </div>`).join('');
+      ${fxAt('party', p.id).map((x) => `<div class="dmg-float ${x.kind === 'heal' ? 'heal' : ''}">${x.kind === 'heal' ? '+' : '-'}${x.dmg}</div>`).join('')}
+    </div>`;
+  }).join('');
 
   const actor = currentActor();
   const skill = actor && actor.skill;
@@ -315,15 +334,24 @@ function battleHtml() {
   const tactic = TACTICS.find((t) => t.id === bui.tactic) || TACTICS[0];
   const manual = bui.tactic === 'manual';
   const canBack = bui.idx > 0;
+  const logBox = `<div class="log ${bui.playing ? 'clickable' : ''}" ${bui.playing ? 'data-act="skip"' : ''}>${bui.feed.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
 
-  return `<div class="stage">
+  const stage = `<div class="stage">
     <img class="backdrop" src="${back}" alt="">
     <div class="enemies">${foes}</div>
   </div>
 
   <div class="battle-party">${party}</div>
 
-  <div class="log">${bs.log.map((l) => `<div>${esc(l)}</div>`).join('')}</div>
+  ${logBox}`;
+
+  if (bui.playing) {
+    return `${stage}
+  <div class="actor-line">R${bs.round} 解決中… <small>タップで早送り</small></div>
+  <button class="btn ghost" data-act="skip">早送り</button>`;
+  }
+
+  return `${stage}
 
   <div class="actor-line">
     R${bs.round} ${actor ? `${actor.name} の番（${bui.idx + 1}/${bui.order.length}）` : '解決中…'}
@@ -360,15 +388,19 @@ function overlayHtml() {
 }
 
 function render() {
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
   let html = '';
   if (view === 'village') html = villageHtml();
   else if (view === 'node') html = nodeHtml();
   else if (view === 'battle') html = battleHtml();
   app.innerHTML = html + overlayHtml();
+  const box = app.querySelector('.log');
+  if (box) box.scrollTop = box.scrollHeight;
 }
 
 /* ---------------- 進行 ---------------- */
 function goVillage(status) {
+  clearPlaybackTimers();
   if (bs) syncItems();
   if (run) {
     meta = finishRun(meta, run, { status });
@@ -416,9 +448,86 @@ function beginBattle(opts = {}) {
     actions: [],
     targetId: (aliveFoes(bs)[0] || {}).id,
     tactic: 'manual',
+    playing: false,
+    feed: [],
+    view: null,
+    fx: null,
+    queue: [],
+    pending: null,
   };
   view = 'battle';
   render();
+}
+
+/* ---------------- 戦闘演出の再生 ---------------- */
+function clearPlaybackTimers() {
+  if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+}
+
+// 最新行だけ1文字ずつ出す。所要時間を返す
+function typeLine(text) {
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+  const el = app.querySelector('.log div:last-child');
+  if (!el) return 0;
+  el.textContent = '';
+  let i = 0;
+  typeTimer = setInterval(() => {
+    i += 1;
+    el.textContent = text.slice(0, i);
+    const box = app.querySelector('.log');
+    if (box) box.scrollTop = box.scrollHeight;
+    if (i >= text.length) { clearInterval(typeTimer); typeTimer = null; }
+  }, TYPE_MS);
+  return text.length * TYPE_MS;
+}
+
+function startPlayback(res) {
+  clearPlaybackTimers();
+  bui.pending = res;
+  bui.queue = res.events.slice();
+  bui.playing = true;
+  bui.fx = null;
+  bui.view = null;
+  nextStep();
+}
+
+function nextStep() {
+  if (!bui || !bui.playing) return;
+  const ev = bui.queue.shift();
+  if (!ev) { finishPlayback(); return; }
+  bui.feed.push(ev.text);
+  if (bui.feed.length > FEED_MAX) bui.feed.splice(0, bui.feed.length - FEED_MAX);
+  bui.view = ev.hp;
+  bui.fx = ev.fx;
+  if (ev.sound) sfx(ev.sound);
+  render();
+  const typed = typeLine(ev.text);
+  stepTimer = setTimeout(nextStep, Math.max(STEP_MS, typed + STEP_PAD));
+}
+
+function skipPlayback() {
+  if (!bui || !bui.playing) return;
+  for (const ev of bui.queue) {
+    bui.feed.push(ev.text);
+    if (ev.fx) bui.fx = ev.fx;
+    bui.view = ev.hp;
+  }
+  if (bui.feed.length > FEED_MAX) bui.feed.splice(0, bui.feed.length - FEED_MAX);
+  bui.queue = [];
+  finishPlayback();
+}
+
+function finishPlayback() {
+  const res = bui && bui.pending;
+  clearPlaybackTimers();
+  if (!bui) return;
+  bui.playing = false;
+  bui.queue = [];
+  bui.pending = null;
+  bui.fx = null;
+  bui.view = null;
+  if (res) afterRound(res);
 }
 
 function afterRound(res) {
@@ -463,29 +572,30 @@ function afterRound(res) {
 
 function commitAction(action) {
   const actor = currentActor();
-  if (!actor || !bs) return;
+  if (!actor || !bs || bui.playing) return;
   bui.actions.push({ actorId: actor.id, ...action });
   bui.idx += 1;
   if (bui.idx >= bui.order.length) {
     const res = resolveRound(bs, bui.actions);
-    afterRound(res);
+    startPlayback(res);
   } else {
     render();
   }
 }
 
 function runAuto() {
-  if (!bs || !bui || bui.tactic === 'manual') return;
+  if (!bs || !bui || bui.tactic === 'manual' || bui.playing) return;
   const actions = planRound(bs, bui.tactic);
   bui.actions = actions;
-  const res = resolveRound(bs, actions);
-  afterRound(res);
+  startPlayback(resolveRound(bs, actions));
 }
 
 /* ---------------- 入力 ---------------- */
 function onAct(act, el) {
-  sfx('click');
   if (act === 'mute') { toggleMute(); render(); return; }
+  // 演出中はどこを押しても早送り（ミュートだけ例外）
+  if (view === 'battle' && bui && bui.playing) { skipPlayback(); return; }
+  sfx('click');
 
   if (view === 'village') {
     if (act === 'tab') { tab = el.dataset.tab; render(); return; }
@@ -654,7 +764,6 @@ function onAct(act, el) {
     if (act === 'attack') {
       if (!actor) return;
       commitAction({ type: 'attack', targetId: bui.targetId });
-      sfx('hit');
       return;
     }
     if (act === 'guard') {
@@ -668,10 +777,8 @@ function onAct(act, el) {
       if (s.id !== 'cover' && s.id !== 'taunt' && actor.skillUses <= 0) { toast('技の残りがない'); return; }
       if (s.id === 'heal') {
         commitAction({ type: 'skill', skillId: 'heal' });
-        sfx('heal');
       } else {
         commitAction({ type: 'skill', skillId: s.id, targetId: bui.targetId });
-        sfx('skill');
       }
       return;
     }
