@@ -193,6 +193,7 @@ function villageHtml() {
   <div class="footer-links">
     <a href="/bestiary.html">ずかん</a>
     <a href="/compare.html">比較</a>
+    <a href="/proto.html">試作: ボス戦</a>
     <span>F2: デバッグ</span>
   </div>`;
 }
