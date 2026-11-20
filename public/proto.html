@@ -111,7 +111,22 @@ html, body {
 .log .warn { color: var(--gold); }
 
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.btn {
+
+/* ---------- つよさ ---------- */
+.sheet.status { text-align: left; max-height: 84vh; overflow-y: auto; }
+.sheet.status h2 { text-align: center; }
+.sheet.status h3 { font-size: 11px; color: var(--dim); margin: 14px 0 6px; letter-spacing: 1px; font-weight: normal; }
+.statgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 10px; color: var(--dim); }
+.statgrid b { display: block; font-size: 17px; color: var(--text); margin-bottom: 2px; }
+.slist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.slist li { display: grid; grid-template-columns: 18px 58px 1fr auto; gap: 6px; align-items: center; font-size: 11px; background: #0e1730; border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
+.slist li.used { opacity: .45; }
+.slist .ds { color: var(--dim); font-size: 10px; }
+.slist .us { color: var(--gold); font-size: 10px; white-space: nowrap; }
+.breakdown { font-size: 11px; color: var(--dim); line-height: 1.9; }
+.breakdown b { color: var(--gold); }
+.close-row { margin-top: 14px; }
+.close-row .btn { width: 100%; }.btn {
   font-family: inherit; font-size: 14px; padding: 12px 8px; border-radius: 10px;
   border: 1px solid var(--line); background: #222f57; color: var(--text); cursor: pointer;
 }
@@ -362,6 +377,7 @@ let pendingNextRound = false;
 let stepTimer = null;
 let typeTimer = null;
 let overlay = null;
+let statusOpen = false;
 
 const TYPE_MS = 14;
 const STEP_MS = 300;
@@ -434,6 +450,7 @@ function render() {
       <span>R<b>${b.round}</b></span>
       <span>首 <b>${alive}/3</b></span>
       <span class="spacer"></span>
+      <button class="chip" data-act="status" ${playing ? 'disabled' : ''}>つよさ</button>
       <button class="chip" data-act="reset">やり直す</button>
     </div>
     <div class="topbar">
@@ -469,9 +486,10 @@ function render() {
     </div>
     <p class="note">
       プロトタイプ：1体・5スロット／首を落とすと与ダメ+12%／毒→爆発・雷→感電の掛け合わせ<br>
-      演出中にタップで早送り。対象の首をタップで切り替え。
+      演出中にタップで早送り。対象の首をタップで切り替え。「つよさ」でビルドの内訳。
     </p>
     ${overlay ? overlayHtml() : ''}
+    ${statusOpen ? statusHtml() : ''}
   `;
 
   const box = app.querySelector('.log');
@@ -483,6 +501,78 @@ function overlayHtml() {
     <h2>${overlay.title}</h2>
     <p>${overlay.text}</p>
     <button class="btn primary" data-act="reset">もう一度</button>
+  </div></div>`;
+}
+
+const SLOT_BASE = { right: 16, left: 10, arm: 20, fang: 6, relic: 30 };
+
+function statusHtml() {
+  const target = targetOf(b);
+  const multNow = target ? multOf(b, target) : 1;
+  const broken = brokenCount(b);
+
+  const slotRows = SLOTS.map((s) => {
+    const left = b.uses[s.id] === undefined ? '∞' : `${b.uses[s.id]}回`;
+    const used = b.used.includes(s.id);
+    const eff = Math.round(SLOT_BASE[s.id] * multNow);
+    return `<li class="${used ? 'used' : ''}">
+      <span>${s.icon}</span>
+      <span>${s.label}</span>
+      <span class="ds">${esc(s.desc)} ・今 <b>${eff}</b></span>
+      <span class="us">${used ? '使用済' : left}</span>
+    </li>`;
+  }).join('');
+
+  const relicRows = RELICS.map((r) => `<li>
+      <span>◆</span>
+      <span>${esc(r.name)}</span>
+      <span class="ds">${esc(r.desc)}</span>
+      <span class="us">常時</span>
+    </li>`).join('');
+
+  const parts = [
+    broken ? `首の破壊 ×${broken}（与ダメ +${broken * 12}%）` : '',
+    target && target.poisonTurns > 0 ? `毒（被ダメ +15%）` : '',
+    target && target.shock > 0 ? `感電（被ダメ +25%）` : '',
+  ].filter(Boolean);
+
+  const heroStatus = [
+    b.hero.poison > 0 ? `毒 残り${b.hero.poison}（${b.hero.poisonDmg}/R）` : '',
+    b.hero.burn > 0 ? `火 残り${b.hero.burn}（${b.hero.burnDmg}/R）` : '',
+    b.hero.guard ? '防御中' : '',
+  ].filter(Boolean);
+
+  return `<div class="overlay" data-act="close-status"><div class="sheet status" data-act="stay">
+    <h2>ガルド</h2>
+    <div class="statgrid">
+      <div><b>${b.hero.hp}/${b.hero.maxHp}</b>HP</div>
+      <div><b>×${multNow.toFixed(2)}</b>現在の倍率</div>
+      <div><b>${broken}/3</b>落とした首</div>
+    </div>
+
+    <h3>状態</h3>
+    <div class="breakdown">${heroStatus.length ? heroStatus.map((x) => `・${x}`).join('<br>') : '・なし'}</div>
+
+    <h3>スロット（行動）</h3>
+    <ul class="slist">${slotRows}</ul>
+
+    <h3>遺物</h3>
+    <ul class="slist">${relicRows}</ul>
+
+    <h3>倍率の内訳（掛け算）</h3>
+    <div class="breakdown">
+      ${parts.length ? parts.map((p) => `・${p}`).join('<br>') : '・今は補正なし'}
+      <br>→ 合計 <b>×${multNow.toFixed(2)}</b>${target ? `（対象: ${esc(target.name)}）` : ''}
+    </div>
+
+    <h3>戦い方のヒント</h3>
+    <div class="breakdown">
+      ・毒牙 → 爆発 で大ダメージ<br>
+      ・雷撃で感電 → 他の攻撃が +25%<br>
+      ・首を落とすほど全体の与ダメが上がる
+    </div>
+
+    <div class="close-row"><button class="btn primary" data-act="close-status">閉じる</button></div>
   </div></div>`;
 }
 
@@ -602,11 +692,15 @@ app.addEventListener('click', (e) => {
   if (!el) return;
   e.preventDefault();
   const actName = el.dataset.act;
+  if (actName === 'stay') return;
+  if (actName === 'status') { statusOpen = true; render(); return; }
+  if (actName === 'close-status') { statusOpen = false; render(); return; }
   if (playing) { skipPlayback(); return; }
   if (actName === 'reset') {
     b = createBattle();
     feed = ['深部の主が現れた！'];
     overlay = null;
+    statusOpen = false;
     fx = null;
     view = null;
     render();
