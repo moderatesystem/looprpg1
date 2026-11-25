@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>後半ボス戦 プロトタイプ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #0b1020;
+  --panel: #161f3a;
+  --panel2: #1d2848;
+  --line: #2e3c66;
+  --text: #e8eefc;
+  --dim: #9fb0d6;
+  --gold: #ffd54f;
+  --hp: #57d17a;
+  --hp-low: #ff6b6b;
+  --red: #ff5c7a;
+  --cyan: #6fe3ff;
+  --ok: #7fffaf;
+  --violet: #b58bff;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; min-height: 100%;
+  background: radial-gradient(900px 500px at 50% -10%, #1a2547 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: 'DotGothic16', system-ui, sans-serif;
+  font-size: 15px;
+  overscroll-behavior: none;
+}
+#app { max-width: 480px; margin: 0 auto; padding: 10px 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+
+.topbar { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+.topbar b { color: var(--text); }
+.topbar .spacer { flex: 1; }
+.mult {
+  font-size: 18px; font-weight: bold; color: var(--gold);
+  text-shadow: 0 0 12px #ffd54f88;
+}
+.mult small { font-size: 10px; color: var(--dim); font-weight: normal; margin-left: 4px; }
+
+.relics { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font-size: 10px; padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: #0e1730; color: var(--dim);
+  white-space: nowrap;
+}
+.chip.gold { border-color: #ffd54f66; color: var(--gold); background: #ffd54f12; }
+.chip.cyan { border-color: #6fe3ff66; color: var(--cyan); background: #6fe3ff10; }
+.chip.red { border-color: #ff5c7a66; color: #ff8fa3; background: #ff5c7a10; }
+.chip.ok { border-color: #7fffaf55; color: var(--ok); background: #7fffaf10; }
+
+.boss { position: relative; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #081018; padding: 10px 8px 8px; min-height: 230px; display: flex; flex-direction: column; justify-content: flex-end; }
+.boss::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #08101800 30%, #081018cc 78%, #081018 100%); pointer-events: none; }
+.boss .art {
+  position: absolute; inset: 0;
+  background: url('/assets/enemies/dragon.png') center 34% / 82% no-repeat;
+  opacity: .72; filter: saturate(.95) brightness(1.05);
+}
+.heads { position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.head {
+  border: 1px solid var(--line); border-radius: 10px; background: #0c1428f5;
+  padding: 6px; cursor: pointer; position: relative;
+  transition: border-color .15s, transform .06s;
+}
+.head:active { transform: scale(.985); }
+.head.target { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.head.broken { cursor: default; border-color: #2a3450; }
+.head.broken .hname, .head.broken .hbar, .head.broken .st { opacity: .3; filter: grayscale(1); }
+.head .hname { font-size: 11px; display: flex; justify-content: space-between; gap: 4px; }
+.head .hname span { color: var(--dim); font-size: 9px; }
+.head .hbar { height: 5px; background: #0a1124; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+.head .hbar > i { display: block; height: 100%; background: var(--red); transition: width .2s; }
+.head .st { margin-top: 4px; min-height: 13px; font-size: 9px; color: var(--ok); }
+.head.shake { animation: shake .3s; }
+
+.hero { border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, var(--panel2), var(--panel)); padding: 8px 10px; position: relative; }
+.hero .row { display: flex; align-items: center; gap: 8px; }
+.hero img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+.hero .bar { flex: 1; height: 10px; background: #0a1124; border-radius: 999px; overflow: hidden; }
+.hero .bar > i { display: block; height: 100%; background: var(--hp); }
+.hero .bar.low > i { background: var(--hp-low); }
+.hero .hptext { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.hero .chips { display: flex; gap: 5px; margin-top: 6px; min-height: 16px; }
+.hero.shake { animation: shake .3s; }
+
+.slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.slot {
+  font-family: inherit; color: var(--text); cursor: pointer;
+  background: #1a2444; border: 1px solid var(--line); border-radius: 10px;
+  padding: 7px 3px 6px; text-align: center; position: relative;
+}
+.slot:active { transform: scale(.97); }
+.slot:disabled { opacity: .32; cursor: not-allowed; }
+.slot .icon { font-size: 17px; line-height: 1; }
+.slot .label { font-size: 10px; margin-top: 3px; }
+.slot .uses { font-size: 9px; color: var(--dim); }
+.slot.hot { border-color: var(--violet); box-shadow: 0 0 10px #b58bff33; }
+
+.log {
+  height: 76px; overflow-y: auto; font-size: 12px; line-height: 1.5;
+  background: #0a1124; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px;
+}
+.log div { opacity: .5; }
+.log div:last-child { opacity: 1; color: #fff; }
+.log .warn { color: var(--gold); }
+
+.acts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+/* ---------- つよさ ---------- */
+.sheet.status { text-align: left; max-height: 84vh; overflow-y: auto; }
+.sheet.status h2 { text-align: center; }
+.sheet.status h3 { font-size: 11px; color: var(--dim); margin: 14px 0 6px; letter-spacing: 1px; font-weight: normal; }
+.statgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 10px; color: var(--dim); }
+.statgrid b { display: block; font-size: 17px; color: var(--text); margin-bottom: 2px; }
+.slist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.slist li { display: grid; grid-template-columns: 18px 58px 1fr auto; gap: 6px; align-items: center; font-size: 11px; background: #0e1730; border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
+.slist li.used { opacity: .45; }
+.slist .ds { color: var(--dim); font-size: 10px; }
+.slist .us { color: var(--gold); font-size: 10px; white-space: nowrap; }
+.breakdown { font-size: 11px; color: var(--dim); line-height: 1.9; }
+.breakdown b { color: var(--gold); }
+.close-row { margin-top: 14px; }
+.close-row .btn { width: 100%; }.btn {
+  font-family: inherit; font-size: 14px; padding: 12px 8px; border-radius: 10px;
+  border: 1px solid var(--line); background: #222f57; color: var(--text); cursor: pointer;
+}
+.btn.primary { background: linear-gradient(180deg, #3a6fd8, #2b57b0); border-color: #5b8cf0; font-weight: bold; }
+.btn.danger { background: linear-gradient(180deg, #b03a52, #7d2740); border-color: #ff5c7a; }
+.btn.ghost { background: transparent; color: var(--dim); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.span2 { grid-column: 1 / -1; }
+
+.dmg-float {
+  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+  font-size: 17px; font-weight: bold; color: #ff8f8f; pointer-events: none;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+  animation: rise .9s ease-out forwards;
+}
+.dmg-float.big { font-size: 24px; color: #ffe27a; }
+.dmg-float.heal { color: var(--ok); }
+.dmg-float.chain { font-size: 13px; color: var(--cyan); }
+@keyframes rise {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.6); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+  25% { transform: translate(-50%, -4px) scale(1); }
+  70% { opacity: 1; transform: translate(-50%, -20px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+
+.overlay { position: fixed; inset: 0; background: #000c; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.sheet { width: 100%; max-width: 360px; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; text-align: center; }
+.sheet h2 { margin: 0 0 6px; font-size: 22px; }
+.sheet.win h2 { color: var(--ok); }
+.sheet.lose h2 { color: var(--red); }
+.sheet p { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
+.note { font-size: 10px; color: #6f80a8; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" style="display:none"></div>
+<script type="module">
+/* ================= ロジック（純粋な状態機械） ================= */
+const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+
+const HEADS = [
+  { id: 'h1', name: '鉄の首', trait: '硬い', maxHp: 120, atk: 12 },
+  { id: 'h2', name: '火の首', trait: '火炎', maxHp: 110, atk: 10 },
+  { id: 'h3', name: '毒の首', trait: '毒', maxHp: 110, atk: 8 },
+];
+
+const SLOTS = [
+  { id: 'right', icon: '⚔', label: '斬撃', desc: '16ダメージ', uses: Infinity },
+  { id: 'left', icon: '🗡', label: '連撃', desc: '10×2ダメージ', uses: 3 },
+  { id: 'arm', icon: '⚡', label: '雷撃', desc: '20＋他部位8／感電', uses: 3 },
+  { id: 'fang', icon: '☠', label: '毒牙', desc: '毒8×3ターン', uses: 2 },
+  { id: 'relic', icon: '✹', label: '爆発', desc: '30＋毒×1.5', uses: 2 },
+];
+
+const RELICS = [
+  { id: 'echo', name: '連鎖の護符', desc: '攻撃のたび他部位に4' },
+  { id: 'overload', name: '過負荷', desc: '落とした首1本で与ダメ+12%' },
+  { id: 'venom', name: '毒の心臓', desc: '毒ダメージ+50%' },
+];
+
+function createBattle() {
+  return {
+    round: 1,
+    hero: { hp: 120, maxHp: 120, guard: false, poison: 0, poisonDmg: 0, burn: 0, burnDmg: 0 },
+    heads: HEADS.map((h) => ({ ...h, hp: h.maxHp, poisonTurns: 0, poisonDmg: 0, shock: 0, broken: false })),
+    uses: { left: 3, arm: 3, fang: 2, relic: 2 },
+    used: [],
+    targetId: 'h1',
+    status: null,
+    events: [],
+    log: [],
+  };
+}
+
+const aliveHeads = (b) => b.heads.filter((h) => !h.broken);
+const brokenCount = (b) => b.heads.length - aliveHeads(b).length;
+
+function multOf(b, head) {
+  let m = 1 + 0.12 * brokenCount(b);
+  if (head && head.poisonTurns > 0) m *= 1.15;
+  if (head && head.shock > 0) m *= 1.25;
+  return m;
+}
+
+function snap(b) {
+  const heads = {};
+  for (const h of b.heads) heads[h.id] = h.hp;
+  return { hero: b.hero.hp, heads };
+}
+
+function emit(b, text, fx = null, extra = {}) {
+  b.log.push(text);
+  b.events.push({ text, fx, hp: snap(b), ...extra });
+}
+
+function breakHead(b, head) {
+  if (head.broken) return;
+  head.broken = true;
+  head.poisonTurns = 0;
+  head.shock = 0;
+  emit(b, `[破壊] ${head.name}を落とした！ 与ダメージ +12%`);
+}
+
+function echo(b, from) {
+  const other = b.heads.find((h) => !h.broken && h.id !== from.id);
+  if (!other) return;
+  other.hp = Math.max(0, other.hp - 4);
+  emit(b, `[護符] ${other.name}に 4`, { side: 'head', id: other.id, dmg: 4, kind: 'chain' });
+  if (other.hp === 0) breakHead(b, other);
+}
+
+function hitHead(b, head, base, label) {
+  if (!head || head.broken) return;
+  const m = multOf(b, head);
+  const crit = Math.random() < 0.15;
+  const dmg = Math.max(1, Math.round(base * m * (crit ? 1.8 : 1) * (0.94 + Math.random() * 0.12)));
+  head.hp = Math.max(0, head.hp - dmg);
+  emit(
+    b,
+    `${label} ${head.name}に ${dmg} ダメージ${crit ? '（会心）' : ''}`,
+    { side: 'head', id: head.id, dmg, kind: 'dmg', crit },
+    { mult: m, crit }
+  );
+  if (head.hp === 0) breakHead(b, head);
+  echo(b, head);
+}
+
+function hitHero(b, base, label, head, big = false) {
+  const m = b.hero.guard ? 0.4 : 1;
+  const dmg = Math.max(1, Math.round(base * m * (0.95 + Math.random() * 0.1)));
+  b.hero.hp = Math.max(0, b.hero.hp - dmg);
+  emit(b, `${label} ガルドに ${dmg} ダメージ${b.hero.guard ? '（防御）' : ''}`, { side: 'hero', id: 'hero', dmg, kind: 'dmg' });
+  if (head && !big && b.hero.hp > 0) {
+    if (head.id === 'h2') { b.hero.burn = 2; b.hero.burnDmg = 6; emit(b, '燃えている（6×2ターン）'); }
+    if (head.id === 'h3') { b.hero.poison = 3; b.hero.poisonDmg = 5; emit(b, '毒を受けた（5×3ターン）'); }
+  }
+}
+
+function checkStatus(b) {
+  if (b.hero.hp <= 0) b.status = 'lose';
+  else if (aliveHeads(b).length === 0) b.status = 'win';
+  return b.status;
+}
+
+function targetOf(b) {
+  return b.heads.find((h) => h.id === b.targetId && !h.broken) || aliveHeads(b)[0] || null;
+}
+
+function act(b, slotId) {
+  b.events = [];
+  if (b.used.includes(slotId)) return null;
+  if (b.uses[slotId] !== undefined && b.uses[slotId] <= 0) return null;
+  const t = targetOf(b);
+  if (!t) return null;
+
+  if (slotId === 'right') {
+    hitHead(b, t, 16, '右手の斬撃！');
+  } else if (slotId === 'left') {
+    hitHead(b, t, 10, '左手の連撃！');
+    hitHead(b, t, 10, '左手の連打！');
+  } else if (slotId === 'arm') {
+    hitHead(b, t, 20, '義手の雷撃！');
+    if (!t.broken) { t.shock = 2; emit(b, `[義手] ${t.name}が感電した（被ダメ+25%）`); }
+    const other = b.heads.find((h) => !h.broken && h.id !== t.id);
+    if (other) hitHead(b, other, 8, '雷が伝った！');
+  } else if (slotId === 'fang') {
+    hitHead(b, t, 6, '毒牙がかすめた！');
+    if (!t.broken) { t.poisonTurns = 3; t.poisonDmg = 8; emit(b, `${t.name}に毒が回った（8×3）`); }
+  } else if (slotId === 'relic') {
+    const p = t.poisonTurns * t.poisonDmg;
+    hitHead(b, t, 30 + p * 1.5, p > 0 ? '[遺物] 毒に反応して爆発！' : '[遺物] 爆発！');
+    t.poisonTurns = 0;
+  }
+
+  if (b.uses[slotId] !== undefined) b.uses[slotId] -= 1;
+  b.used.push(slotId);
+  checkStatus(b);
+  return { events: b.events.slice(), status: b.status };
+}
+
+function endTurn(b, guard = false) {
+  b.events = [];
+  if (guard) { b.hero.guard = true; emit(b, 'ガルドは身を守っている'); }
+
+  const big = b.round % 3 === 0;
+  if (big) {
+    emit(b, '3本の首が息を吸っている……大技！', null, { warn: true });
+    for (const h of aliveHeads(b)) {
+      if (b.hero.hp <= 0) break;
+      hitHero(b, Math.round(h.atk * 1.6), `${h.name}の大技！`, h, true);
+    }
+  } else {
+    for (const h of aliveHeads(b)) {
+      if (b.hero.hp <= 0) break;
+      hitHero(b, h.atk + rnd(-1, 2), `${h.name}の攻撃！`, h);
+    }
+  }
+
+  // 首の毒
+  for (const h of b.heads) {
+    if (h.broken || h.poisonTurns <= 0) continue;
+    const d = Math.round(h.poisonDmg * 1.5);
+    h.hp = Math.max(0, h.hp - d);
+    emit(b, `毒が回っている ${h.name}に ${d}`, { side: 'head', id: h.id, dmg: d, kind: 'poison' });
+    h.poisonTurns -= 1;
+    if (h.hp === 0) breakHead(b, h);
+  }
+  // 感電の残り
+  for (const h of b.heads) if (h.shock > 0) h.shock -= 1;
+
+  // 主人公の状態
+  if (b.hero.hp > 0 && b.hero.poison > 0) {
+    b.hero.hp = Math.max(0, b.hero.hp - b.hero.poisonDmg);
+    emit(b, `毒で ${b.hero.poisonDmg} ダメージ`, { side: 'hero', id: 'hero', dmg: b.hero.poisonDmg, kind: 'poison' });
+    b.hero.poison -= 1;
+  }
+  if (b.hero.hp > 0 && b.hero.burn > 0) {
+    b.hero.hp = Math.max(0, b.hero.hp - b.hero.burnDmg);
+    emit(b, `燃えて ${b.hero.burnDmg} ダメージ`, { side: 'hero', id: 'hero', dmg: b.hero.burnDmg, kind: 'poison' });
+    b.hero.burn -= 1;
+  }
+
+  checkStatus(b);
+  if (!b.status && (b.round + 1) % 3 === 0) {
+    emit(b, '首が息を吸っている（次のラウンド大技）', null, { warn: true });
+  }
+  return { events: b.events.slice(), status: b.status };
+}
+
+/* ================= UI ================= */
+const app = document.getElementById('app');
+let b = createBattle();
+let playing = false;
+let queue = [];
+let feed = ['深部の主が現れた！'];
+let view = null;
+let fx = null;
+let pending = null;
+let pendingNextRound = false;
+let stepTimer = null;
+let typeTimer = null;
+let overlay = null;
+let statusOpen = false;
+
+const TYPE_MS = 14;
+const STEP_MS = 300;
+const STEP_PAD = 80;
+const FEED_MAX = 40;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pct = (hp, max) => Math.max(0, Math.min(100, Math.round((hp / max) * 100)));
+
+function hpAt(side, id, fallback) {
+  if (!view) return fallback;
+  if (side === 'hero') return view.hero;
+  return view.heads[id] !== undefined ? view.heads[id] : fallback;
+}
+const fxAt = (side, id) => (fx && fx.side === side && fx.id === id ? [fx] : []);
+
+function chipFor(status) {
+  if (status.kind === 'poison') return `<span class="chip ok">${status.label}</span>`;
+  return `<span class="chip">${status.label}</span>`;
+}
+
+function render() {
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+  const target = targetOf(b);
+  const mult = target ? multOf(b, target) : 1;
+  const alive = aliveHeads(b).length;
+
+  const relicChips = RELICS.map((r) => `<span class="chip gold">${esc(r.name)}</span>`).join('');
+  const heroStatus = [
+    b.hero.poison > 0 ? `<span class="chip ok">毒 ${b.hero.poison}</span>` : '',
+    b.hero.burn > 0 ? `<span class="chip red">火 ${b.hero.burn}</span>` : '',
+    b.hero.guard ? `<span class="chip cyan">防御</span>` : '',
+  ].join('');
+
+  const heads = b.heads.map((h) => {
+    const hp = hpAt('head', h.id, h.hp);
+    const st = [
+      h.poisonTurns > 0 ? `毒${h.poisonTurns}` : '',
+      h.shock > 0 ? `感電${h.shock}` : '',
+      h.broken ? '落ちた' : '',
+    ].filter(Boolean).join(' ');
+    const isTarget = b.targetId === h.id && !h.broken;
+    return `<div class="head ${isTarget ? 'target' : ''} ${h.broken ? 'broken' : ''} ${fx && fx.side === 'head' && fx.id === h.id && fx.kind === 'dmg' ? 'shake' : ''}"
+                 data-act="target" data-id="${h.id}">
+      <div class="hname">${esc(h.name)}<span>${esc(h.trait)}</span></div>
+      <div class="hbar"><i style="width:${pct(hp, h.maxHp)}%"></i></div>
+      <div class="st">${st}</div>
+      ${fxAt('head', h.id).map((x) => `<div class="dmg-float ${x.kind === 'chain' ? 'chain' : ''} ${x.crit ? 'big' : ''}">${x.crit ? '会心 ' : ''}-${x.dmg}</div>`).join('')}
+    </div>`;
+  }).join('');
+
+  const heroHp = hpAt('hero', 'hero', b.hero.hp);
+
+  const slots = SLOTS.map((s) => {
+    const left = b.uses[s.id] === undefined ? null : b.uses[s.id];
+    const used = b.used.includes(s.id) || (left !== null && left <= 0);
+    return `<button class="slot ${s.id === 'relic' ? 'hot' : ''}" data-act="slot" data-id="${s.id}" ${used || playing || b.status ? 'disabled' : ''}>
+      <div class="icon">${s.icon}</div>
+      <div class="label">${s.label}</div>
+      <div class="uses">${left === null ? '∞' : `${left}回`}</div>
+    </button>`;
+  }).join('');
+
+  const logHtml = feed.map((l) => `<div class="${l.startsWith('首が息') ? 'warn' : ''}">${esc(l)}</div>`).join('');
+
+  const canAct = !playing && !b.status;
+
+  app.innerHTML = `
+    <div class="topbar">
+      <span>R<b>${b.round}</b></span>
+      <span>首 <b>${alive}/3</b></span>
+      <span class="spacer"></span>
+      <button class="chip" data-act="status" ${playing ? 'disabled' : ''}>つよさ</button>
+      <button class="chip" data-act="reset">やり直す</button>
+    </div>
+    <div class="topbar">
+      <span class="mult">×${mult.toFixed(2)}<small>倍率</small></span>
+      <span class="spacer"></span>
+      <span>対象: <b>${esc(target ? target.name : '—')}</b></span>
+    </div>
+    <div class="relics">${relicChips}</div>
+
+    <div class="boss">
+      <div class="art"></div>
+      <div class="heads">${heads}</div>
+    </div>
+
+    <div class="hero ${fx && fx.side === 'hero' && fx.kind === 'dmg' ? 'shake' : ''}">
+      <div class="row">
+        <img src="/assets/hero.png" alt="">
+        <div class="bar ${heroHp / b.hero.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(heroHp, b.hero.maxHp)}%"></i></div>
+        <span class="hptext">${heroHp} / ${b.hero.maxHp}</span>
+      </div>
+      <div class="chips">${heroStatus}</div>
+      ${fxAt('hero', 'hero').map((x) => `<div class="dmg-float">-${x.dmg}</div>`).join('')}
+    </div>
+
+    <div class="slots">${slots}</div>
+
+    <div class="log ${playing ? 'clickable' : ''}" ${playing ? 'data-act="skip"' : ''}>${logHtml}</div>
+
+    <div class="acts">
+      <button class="btn primary" data-act="auto" ${canAct ? '' : 'disabled'}>おまかせ</button>
+      <button class="btn" data-act="guard" ${canAct ? '' : 'disabled'}>防御して終了</button>
+      <button class="btn ghost span2" data-act="end" ${canAct ? '' : 'disabled'}>このラウンドを終える</button>
+    </div>
+    <p class="note">
+      プロトタイプ：1体・5スロット／首を落とすと与ダメ+12%／毒→爆発・雷→感電の掛け合わせ<br>
+      演出中にタップで早送り。対象の首をタップで切り替え。「つよさ」でビルドの内訳。
+    </p>
+    ${overlay ? overlayHtml() : ''}
+    ${statusOpen ? statusHtml() : ''}
+  `;
+
+  const box = app.querySelector('.log');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function overlayHtml() {
+  return `<div class="overlay"><div class="sheet ${overlay.cls}">
+    <h2>${overlay.title}</h2>
+    <p>${overlay.text}</p>
+    <button class="btn primary" data-act="reset">もう一度</button>
+  </div></div>`;
+}
+
+const SLOT_BASE = { right: 16, left: 10, arm: 20, fang: 6, relic: 30 };
+
+function statusHtml() {
+  const target = targetOf(b);
+  const multNow = target ? multOf(b, target) : 1;
+  const broken = brokenCount(b);
+
+  const slotRows = SLOTS.map((s) => {
+    const left = b.uses[s.id] === undefined ? '∞' : `${b.uses[s.id]}回`;
+    const used = b.used.includes(s.id);
+    const eff = Math.round(SLOT_BASE[s.id] * multNow);
+    return `<li class="${used ? 'used' : ''}">
+      <span>${s.icon}</span>
+      <span>${s.label}</span>
+      <span class="ds">${esc(s.desc)} ・今 <b>${eff}</b></span>
+      <span class="us">${used ? '使用済' : left}</span>
+    </li>`;
+  }).join('');
+
+  const relicRows = RELICS.map((r) => `<li>
+      <span>◆</span>
+      <span>${esc(r.name)}</span>
+      <span class="ds">${esc(r.desc)}</span>
+      <span class="us">常時</span>
+    </li>`).join('');
+
+  const parts = [
+    broken ? `首の破壊 ×${broken}（与ダメ +${broken * 12}%）` : '',
+    target && target.poisonTurns > 0 ? `毒（被ダメ +15%）` : '',
+    target && target.shock > 0 ? `感電（被ダメ +25%）` : '',
+  ].filter(Boolean);
+
+  const heroStatus = [
+    b.hero.poison > 0 ? `毒 残り${b.hero.poison}（${b.hero.poisonDmg}/R）` : '',
+    b.hero.burn > 0 ? `火 残り${b.hero.burn}（${b.hero.burnDmg}/R）` : '',
+    b.hero.guard ? '防御中' : '',
+  ].filter(Boolean);
+
+  return `<div class="overlay" data-act="close-status"><div class="sheet status" data-act="stay">
+    <h2>ガルド</h2>
+    <div class="statgrid">
+      <div><b>${b.hero.hp}/${b.hero.maxHp}</b>HP</div>
+      <div><b>×${multNow.toFixed(2)}</b>現在の倍率</div>
+      <div><b>${broken}/3</b>落とした首</div>
+    </div>
+
+    <h3>状態</h3>
+    <div class="breakdown">${heroStatus.length ? heroStatus.map((x) => `・${x}`).join('<br>') : '・なし'}</div>
+
+    <h3>スロット（行動）</h3>
+    <ul class="slist">${slotRows}</ul>
+
+    <h3>遺物</h3>
+    <ul class="slist">${relicRows}</ul>
+
+    <h3>倍率の内訳（掛け算）</h3>
+    <div class="breakdown">
+      ${parts.length ? parts.map((p) => `・${p}`).join('<br>') : '・今は補正なし'}
+      <br>→ 合計 <b>×${multNow.toFixed(2)}</b>${target ? `（対象: ${esc(target.name)}）` : ''}
+    </div>
+
+    <h3>戦い方のヒント</h3>
+    <div class="breakdown">
+      ・毒牙 → 爆発 で大ダメージ<br>
+      ・雷撃で感電 → 他の攻撃が +25%<br>
+      ・首を落とすほど全体の与ダメが上がる
+    </div>
+
+    <div class="close-row"><button class="btn primary" data-act="close-status">閉じる</button></div>
+  </div></div>`;
+}
+
+/* ---- 再生 ---- */
+function clearTimers() {
+  if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+}
+
+function typeLine(text) {
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+  const el = app.querySelector('.log div:last-child');
+  if (!el) return 0;
+  el.textContent = '';
+  let i = 0;
+  typeTimer = setInterval(() => {
+    i += 1;
+    el.textContent = text.slice(0, i);
+    const box = app.querySelector('.log');
+    if (box) box.scrollTop = box.scrollHeight;
+    if (i >= text.length) { clearInterval(typeTimer); typeTimer = null; }
+  }, TYPE_MS);
+  return text.length * TYPE_MS;
+}
+
+function startPlayback(events, status) {
+  clearTimers();
+  pending = status || null;
+  queue = events.slice();
+  playing = true;
+  fx = null;
+  view = null;
+  nextStep();
+}
+
+function nextStep() {
+  if (!playing) return;
+  const ev = queue.shift();
+  if (!ev) { finishPlayback(); return; }
+  feed.push(ev.text);
+  if (feed.length > FEED_MAX) feed.splice(0, feed.length - FEED_MAX);
+  view = ev.hp;
+  fx = ev.fx;
+  render();
+  const typed = typeLine(ev.text);
+  stepTimer = setTimeout(nextStep, Math.max(STEP_MS, typed + STEP_PAD));
+}
+
+function skipPlayback() {
+  if (!playing) return;
+  for (const ev of queue) {
+    feed.push(ev.text);
+    if (ev.fx) fx = ev.fx;
+    view = ev.hp;
+  }
+  if (feed.length > FEED_MAX) feed.splice(0, feed.length - FEED_MAX);
+  queue = [];
+  finishPlayback();
+}
+
+function finishPlayback() {
+  clearTimers();
+  playing = false;
+  queue = [];
+  fx = null;
+  view = null;
+  const status = pending;
+  pending = null;
+  if (status) {
+    b.status = status;
+    overlay = status === 'win'
+      ? { cls: 'win', title: '深部の主を倒した', text: `R${b.round}・落とした首 ${brokenCount(b)}/3・残りHP ${b.hero.hp}` }
+      : { cls: 'lose', title: '全滅', text: `R${b.round}・落とした首 ${brokenCount(b)}/3` };
+  } else if (pendingNextRound) {
+    b.round += 1;
+    b.used = [];
+    b.hero.guard = false;
+  }
+  pendingNextRound = false;
+  render();
+}
+
+/* ---- 進行 ---- */
+function afterPlayerAction(res) {
+  if (!res) return;
+  if (res.events.length === 0) { render(); return; }
+  startPlayback(res.events, res.status);
+}
+
+function endRound(guard = false) {
+  const res = endTurn(b, guard);
+  pendingNextRound = !b.status;
+  startPlayback(res.events, res.status);
+}
+
+function autoTurn() {
+  const events = [];
+  for (const s of SLOTS) {
+    if (b.used.includes(s.id)) continue;
+    if (b.uses[s.id] !== undefined && b.uses[s.id] <= 0) continue;
+    const r = act(b, s.id);
+    if (r) events.push(...r.events);
+    if (b.status) break;
+  }
+  if (!b.status) {
+    const r = endTurn(b, false);
+    events.push(...r.events);
+    if (!b.status) pendingNextRound = true;
+  }
+  if (events.length) startPlayback(events, b.status);
+  else render();
+}
+
+/* ---- 入力 ---- */
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  e.preventDefault();
+  const actName = el.dataset.act;
+  if (actName === 'stay') return;
+  if (actName === 'status') { statusOpen = true; render(); return; }
+  if (actName === 'close-status') { statusOpen = false; render(); return; }
+  if (playing) { skipPlayback(); return; }
+  if (actName === 'reset') {
+    b = createBattle();
+    feed = ['深部の主が現れた！'];
+    overlay = null;
+    statusOpen = false;
+    fx = null;
+    view = null;
+    render();
+    return;
+  }
+  if (actName === 'target') {
+    const h = b.heads.find((x) => x.id === el.dataset.id);
+    if (h && !h.broken) { b.targetId = h.id; render(); }
+    return;
+  }
+  if (b.status) return;
+  if (actName === 'slot') {
+    afterPlayerAction(act(b, el.dataset.id));
+    return;
+  }
+  if (actName === 'end') { endRound(false); return; }
+  if (actName === 'guard') { endRound(true); return; }
+  if (actName === 'auto') { autoTurn(); return; }
+});
+
+render();
+</script>
+</body>
+</html>

@@ -4,721 +4,875 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
-<title>後半ボス戦 プロトタイプ</title>
+<title>バトル試作：3体・プロセス制</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <style>
 :root {
-  --bg: #0b1020;
-  --panel: #161f3a;
-  --panel2: #1d2848;
-  --line: #2e3c66;
-  --text: #e8eefc;
-  --dim: #9fb0d6;
-  --gold: #ffd54f;
-  --hp: #57d17a;
-  --hp-low: #ff6b6b;
-  --red: #ff5c7a;
-  --cyan: #6fe3ff;
-  --ok: #7fffaf;
-  --violet: #b58bff;
+  --bg:#0b1020; --panel:#161f3a; --panel2:#1d2848; --line:#2e3c66;
+  --text:#e8eefc; --dim:#9fb0d6; --gold:#ffd54f; --hp:#57d17a; --hp-low:#ff6b6b;
+  --red:#ff5c7a; --cyan:#6fe3ff; --ok:#7fffaf; --violet:#b58bff; --orange:#ff9f6b;
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html, body {
-  margin: 0; padding: 0; min-height: 100%;
-  background: radial-gradient(900px 500px at 50% -10%, #1a2547 0%, var(--bg) 60%);
-  color: var(--text);
-  font-family: 'DotGothic16', system-ui, sans-serif;
-  font-size: 15px;
-  overscroll-behavior: none;
+  margin:0; padding:0; min-height:100%;
+  background:radial-gradient(900px 500px at 50% -10%, #1a2547 0%, var(--bg) 60%);
+  color:var(--text); font-family:'DotGothic16', system-ui, sans-serif; font-size:14px;
+  overscroll-behavior:none;
 }
-#app { max-width: 480px; margin: 0 auto; padding: 10px 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+#app { max-width:520px; margin:0 auto; padding:10px 12px 24px; display:flex; flex-direction:column; gap:8px; }
 
-.topbar { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
-.topbar b { color: var(--text); }
-.topbar .spacer { flex: 1; }
-.mult {
-  font-size: 18px; font-weight: bold; color: var(--gold);
-  text-shadow: 0 0 12px #ffd54f88;
+/* 選択 */
+.title { font-size:20px; letter-spacing:1px; margin:6px 0 0; }
+.sub { color:var(--dim); font-size:12px; margin:0; }
+.select { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+.scard {
+  font-family:inherit; text-align:left; color:var(--text); cursor:pointer;
+  background:linear-gradient(180deg, var(--panel2), var(--panel));
+  border:1px solid var(--line); border-radius:12px; padding:12px;
 }
-.mult small { font-size: 10px; color: var(--dim); font-weight: normal; margin-left: 4px; }
+.scard:active { transform:scale(.99); }
+.scard h3 { margin:0 0 4px; font-size:15px; color:var(--gold); }
+.scard p { margin:0; font-size:11px; color:var(--dim); line-height:1.6; }
+.note { font-size:10px; color:#6f80a8; text-align:center; line-height:1.7; margin:8px 0 0; }
 
-.relics { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip {
-  font-size: 10px; padding: 3px 7px; border-radius: 999px;
-  border: 1px solid var(--line); background: #0e1730; color: var(--dim);
-  white-space: nowrap;
+/* 上部 */
+.topbar { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--dim); }
+.topbar b { color:var(--text); }
+.topbar .spacer { flex:1; }
+.phase { font-size:10px; padding:3px 8px; border-radius:999px; border:1px solid; white-space:nowrap; }
+.phase.ally { color:#9fd4ff; border-color:#3a6fd8; background:#3a6fd822; }
+.phase.enemy { color:#ff9f9f; border-color:#b03a52; background:#b03a5222; }
+.chipbtn { font-family:inherit; font-size:10px; padding:3px 7px; border-radius:999px; border:1px solid var(--line); background:#0e1730; color:var(--dim); cursor:pointer; }
+
+/* 敵 */
+.foes { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.foe {
+  position:relative; border:1px solid var(--line); border-radius:10px; background:#0c1428f2;
+  padding:5px; cursor:pointer; transition:border-color .12s;
 }
-.chip.gold { border-color: #ffd54f66; color: var(--gold); background: #ffd54f12; }
-.chip.cyan { border-color: #6fe3ff66; color: var(--cyan); background: #6fe3ff10; }
-.chip.red { border-color: #ff5c7a66; color: #ff8fa3; background: #ff5c7a10; }
-.chip.ok { border-color: #7fffaf55; color: var(--ok); background: #7fffaf10; }
-
-.boss { position: relative; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #081018; padding: 10px 8px 8px; min-height: 230px; display: flex; flex-direction: column; justify-content: flex-end; }
-.boss::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #08101800 30%, #081018cc 78%, #081018 100%); pointer-events: none; }
-.boss .art {
-  position: absolute; inset: 0;
-  background: url('/assets/enemies/dragon.png') center 34% / 82% no-repeat;
-  opacity: .72; filter: saturate(.95) brightness(1.05);
+.foe.target { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+.foe.dead { opacity:.32; filter:grayscale(1); cursor:default; }
+.foe img { width:100%; height:62px; object-fit:contain; image-rendering:pixelated; display:block; }
+.foe .name { font-size:10px; margin-top:1px; }
+.foe .intent {
+  font-size:9px; color:var(--gold); text-align:center; margin-top:2px;
+  border:1px solid #ffd54f44; background:#ffd54f10; border-radius:5px; padding:1px 3px;
 }
-.heads { position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-.head {
-  border: 1px solid var(--line); border-radius: 10px; background: #0c1428f5;
-  padding: 6px; cursor: pointer; position: relative;
-  transition: border-color .15s, transform .06s;
+.foe .bar, .pc .bar { height:5px; background:#0a1124; border-radius:999px; overflow:hidden; }
+.foe .bar { margin-top:3px; }
+.foe .bar > i, .pc .bar > i { display:block; height:100%; background:var(--hp); }
+.foe .bar > i { background:var(--red); }
+.pc .bar.low > i { background:var(--hp-low); }
+.foe .nums { display:flex; justify-content:space-between; font-size:8px; color:var(--dim); margin-top:2px; }
+.foe.shake, .pc.shake { animation:shake .3s; }
+
+/* 味方 */
+.party { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.pc {
+  position:relative; border:1px solid var(--line); border-radius:10px;
+  background:linear-gradient(180deg, var(--panel2), var(--panel)); padding:6px;
 }
-.head:active { transform: scale(.985); }
-.head.target { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
-.head.broken { cursor: default; border-color: #2a3450; }
-.head.broken .hname, .head.broken .hbar, .head.broken .st { opacity: .3; filter: grayscale(1); }
-.head .hname { font-size: 11px; display: flex; justify-content: space-between; gap: 4px; }
-.head .hname span { color: var(--dim); font-size: 9px; }
-.head .hbar { height: 5px; background: #0a1124; border-radius: 999px; overflow: hidden; margin-top: 5px; }
-.head .hbar > i { display: block; height: 100%; background: var(--red); transition: width .2s; }
-.head .st { margin-top: 4px; min-height: 13px; font-size: 9px; color: var(--ok); }
-.head.shake { animation: shake .3s; }
+.pc.active { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+.pc.down { opacity:.42; filter:grayscale(.6); }
+.pc .head { display:flex; gap:5px; align-items:center; }
+.pc img { width:34px; height:34px; object-fit:contain; image-rendering:pixelated; }
+.pc .name { font-size:10px; line-height:1.2; }
+.pc .role { font-size:8px; color:var(--dim); }
+.pc .bar { margin-top:4px; }
+.pc .nums { display:flex; justify-content:space-between; font-size:8px; color:var(--dim); margin-top:2px; }
+.pips { display:flex; gap:2px; margin-top:3px; }
+.pips i { width:6px; height:6px; border-radius:50%; background:#0a1124; border:1px solid var(--line); }
+.pips i.on { background:var(--gold); border-color:var(--gold); }
+.chips { display:flex; flex-wrap:wrap; gap:2px; margin-top:3px; min-height:12px; }
+.chips .st { font-size:8px; padding:0 3px; border-radius:4px; border:1px solid var(--line); color:var(--dim); }
+.chips .st.poison { color:var(--ok); border-color:#7fffaf55; }
+.chips .st.paralysis { color:var(--gold); border-color:#ffd54f55; }
+.chips .st.seal { color:var(--violet); border-color:#b58bff55; }
+.chips .st.atkUp { color:var(--orange); border-color:#ff9f6b55; }
+.chips .st.regen { color:var(--ok); border-color:#7fffaf55; }
+.chips .st.dodge { color:var(--cyan); border-color:#6fe3ff55; }
 
-.hero { border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, var(--panel2), var(--panel)); padding: 8px 10px; position: relative; }
-.hero .row { display: flex; align-items: center; gap: 8px; }
-.hero img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
-.hero .bar { flex: 1; height: 10px; background: #0a1124; border-radius: 999px; overflow: hidden; }
-.hero .bar > i { display: block; height: 100%; background: var(--hp); }
-.hero .bar.low > i { background: var(--hp-low); }
-.hero .hptext { font-size: 12px; color: var(--dim); white-space: nowrap; }
-.hero .chips { display: flex; gap: 5px; margin-top: 6px; min-height: 16px; }
-.hero.shake { animation: shake .3s; }
-
-.slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-.slot {
-  font-family: inherit; color: var(--text); cursor: pointer;
-  background: #1a2444; border: 1px solid var(--line); border-radius: 10px;
-  padding: 7px 3px 6px; text-align: center; position: relative;
+/* 行動 */
+.actorline { font-size:12px; color:var(--dim); }
+.actorline b { color:var(--gold); }
+.actions { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.actbtn {
+  font-family:inherit; color:var(--text); background:#1a2444; border:1px solid var(--line);
+  border-radius:9px; padding:6px 4px; text-align:center; cursor:pointer;
 }
-.slot:active { transform: scale(.97); }
-.slot:disabled { opacity: .32; cursor: not-allowed; }
-.slot .icon { font-size: 17px; line-height: 1; }
-.slot .label { font-size: 10px; margin-top: 3px; }
-.slot .uses { font-size: 9px; color: var(--dim); }
-.slot.hot { border-color: var(--violet); box-shadow: 0 0 10px #b58bff33; }
-
-.log {
-  height: 76px; overflow-y: auto; font-size: 12px; line-height: 1.5;
-  background: #0a1124; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px;
+.actbtn:active { transform:scale(.98); }
+.actbtn:disabled { opacity:.28; cursor:not-allowed; }
+.actbtn .n { font-size:10px; }
+.actbtn .d { font-size:8px; color:var(--dim); margin-top:1px; }
+.actbtn .u { font-size:8px; color:var(--gold); margin-top:1px; }
+.orders { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.order {
+  font-family:inherit; font-size:9px; padding:6px 2px; border-radius:8px; cursor:pointer;
+  color:var(--text); background:#0e1730; border:1px solid var(--line); text-align:center;
 }
-.log div { opacity: .5; }
-.log div:last-child { opacity: 1; color: #fff; }
-.log .warn { color: var(--gold); }
+.order:disabled { opacity:.28; cursor:not-allowed; }
+.order .u { display:block; font-size:8px; color:var(--dim); }
 
-.acts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+/* ログ */
+.log { height:96px; overflow-y:auto; font-size:11px; line-height:1.5; padding:6px 8px; background:#0a1124; border:1px solid var(--line); border-radius:9px; }
+.log div { opacity:.55; }
+.log div:last-child { opacity:1; color:#fff; }
+.log .phase { color:var(--gold); opacity:.95; margin-top:5px; border-top:1px dashed #2e3c66; padding-top:3px; }
+.log .bad { color:#ffb3c0; }
+.log .good { color:var(--ok); }
+.log .block { color:var(--cyan); }
 
-/* ---------- つよさ ---------- */
-.sheet.status { text-align: left; max-height: 84vh; overflow-y: auto; }
-.sheet.status h2 { text-align: center; }
-.sheet.status h3 { font-size: 11px; color: var(--dim); margin: 14px 0 6px; letter-spacing: 1px; font-weight: normal; }
-.statgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 10px; color: var(--dim); }
-.statgrid b { display: block; font-size: 17px; color: var(--text); margin-bottom: 2px; }
-.slist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.slist li { display: grid; grid-template-columns: 18px 58px 1fr auto; gap: 6px; align-items: center; font-size: 11px; background: #0e1730; border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
-.slist li.used { opacity: .45; }
-.slist .ds { color: var(--dim); font-size: 10px; }
-.slist .us { color: var(--gold); font-size: 10px; white-space: nowrap; }
-.breakdown { font-size: 11px; color: var(--dim); line-height: 1.9; }
-.breakdown b { color: var(--gold); }
-.close-row { margin-top: 14px; }
-.close-row .btn { width: 100%; }.btn {
-  font-family: inherit; font-size: 14px; padding: 12px 8px; border-radius: 10px;
-  border: 1px solid var(--line); background: #222f57; color: var(--text); cursor: pointer;
-}
-.btn.primary { background: linear-gradient(180deg, #3a6fd8, #2b57b0); border-color: #5b8cf0; font-weight: bold; }
-.btn.danger { background: linear-gradient(180deg, #b03a52, #7d2740); border-color: #ff5c7a; }
-.btn.ghost { background: transparent; color: var(--dim); }
-.btn:disabled { opacity: .35; cursor: not-allowed; }
-.span2 { grid-column: 1 / -1; }
-
+/* 演出 */
 .dmg-float {
-  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
-  font-size: 17px; font-weight: bold; color: #ff8f8f; pointer-events: none;
-  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
-  animation: rise .9s ease-out forwards;
+  position:absolute; top:-2px; left:50%; transform:translateX(-50%);
+  font-size:18px; font-weight:bold; color:#ff8f8f; pointer-events:none;
+  text-shadow:1px 1px 0 #000,-1px 1px 0 #000,1px -1px 0 #000,-1px -1px 0 #000;
+  animation:rise .9s ease-out forwards; z-index:5;
 }
-.dmg-float.big { font-size: 24px; color: #ffe27a; }
-.dmg-float.heal { color: var(--ok); }
-.dmg-float.chain { font-size: 13px; color: var(--cyan); }
+.dmg-float.big { font-size:23px; color:#ffe27a; }
+.dmg-float.heal { color:var(--ok); }
 @keyframes rise {
-  0% { opacity: 0; transform: translate(-50%, 8px) scale(.6); }
-  12% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
-  25% { transform: translate(-50%, -4px) scale(1); }
-  70% { opacity: 1; transform: translate(-50%, -20px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
+  0% { opacity:0; transform:translate(-50%,8px) scale(.6); }
+  12% { opacity:1; transform:translate(-50%,0) scale(1.15); }
+  25% { transform:translate(-50%,-4px) scale(1); }
+  70% { opacity:1; transform:translate(-50%,-20px) scale(1); }
+  100% { opacity:0; transform:translate(-50%,-30px) scale(1); }
 }
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  50% { transform: translateX(4px); }
-  75% { transform: translateX(-2px); }
+  0%,100% { transform:translateX(0); }
+  25% { transform:translateX(-4px); }
+  50% { transform:translateX(4px); }
+  75% { transform:translateX(-2px); }
 }
 
-.overlay { position: fixed; inset: 0; background: #000c; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.sheet { width: 100%; max-width: 360px; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; text-align: center; }
-.sheet h2 { margin: 0 0 6px; font-size: 22px; }
-.sheet.win h2 { color: var(--ok); }
-.sheet.lose h2 { color: var(--red); }
-.sheet p { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
-.note { font-size: 10px; color: #6f80a8; text-align: center; line-height: 1.6; }
+/* オーバーレイ */
+.overlay { position:fixed; inset:0; background:#000c; z-index:30; display:flex; align-items:center; justify-content:center; padding:20px; }
+.sheet { width:100%; max-width:360px; background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line); border-radius:14px; padding:18px; text-align:center; }
+.sheet h2 { margin:0 0 6px; font-size:22px; }
+.sheet.win h2 { color:var(--ok); }
+.sheet.lose h2 { color:var(--red); }
+.sheet p { color:var(--dim); font-size:12px; margin:0 0 14px; line-height:1.7; }
+.btn { font-family:inherit; font-size:14px; padding:11px 8px; border-radius:10px; border:1px solid var(--line); background:#222f57; color:var(--text); cursor:pointer; width:100%; margin-bottom:6px; }
+.btn.primary { background:linear-gradient(180deg,#3a6fd8,#2b57b0); border-color:#5b8cf0; font-weight:bold; }
+.btn.ghost { background:transparent; color:var(--dim); }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div id="toast" style="display:none"></div>
 <script type="module">
-/* ================= ロジック（純粋な状態機械） ================= */
+/* ================= データ ================= */
 const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
-const HEADS = [
-  { id: 'h1', name: '鉄の首', trait: '硬い', maxHp: 120, atk: 12 },
-  { id: 'h2', name: '火の首', trait: '火炎', maxHp: 110, atk: 10 },
-  { id: 'h3', name: '毒の首', trait: '毒', maxHp: 110, atk: 8 },
+const MEMBERS = [
+  { id:'gald', name:'ガルド', role:'盾', img:'/assets/npcs/role-guard.png', hp:55, atk:8, def:3 },
+  { id:'yu', name:'ユウ', role:'火力', img:'/assets/hero.png', hp:38, atk:13, def:1 },
+  { id:'sera', name:'セラ', role:'支援', img:'/assets/npcs/role-priest.png', hp:32, atk:6, def:1 },
 ];
 
-const SLOTS = [
-  { id: 'right', icon: '⚔', label: '斬撃', desc: '16ダメージ', uses: Infinity },
-  { id: 'left', icon: '🗡', label: '連撃', desc: '10×2ダメージ', uses: 3 },
-  { id: 'arm', icon: '⚡', label: '雷撃', desc: '20＋他部位8／感電', uses: 3 },
-  { id: 'fang', icon: '☠', label: '毒牙', desc: '毒8×3ターン', uses: 2 },
-  { id: 'relic', icon: '✹', label: '爆発', desc: '30＋毒×1.5', uses: 2 },
+const SKILLS = {
+  gald: [
+    { id:'bash', name:'盾撃', icon:'🛡', desc:'攻撃＋ブロック5', base:6, block:5 },
+    { id:'taunt', name:'挑発', icon:'📣', desc:'狙いを自分に＋ブロック6', block:6, taunt:true, uses:2 },
+  ],
+  yu: [
+    { id:'double', name:'連撃', icon:'🗡', desc:'5×2ダメージ', base:5, hits:2, uses:2 },
+    { id:'finisher', name:'必殺', icon:'🔥', desc:'テンション3：9×2', base:9, hits:2, tension:3, uses:1 },
+  ],
+  sera: [
+    { id:'heal', name:'いやし', icon:'✚', desc:'最も減った味方を14回復', heal:14, uses:2 },
+    { id:'bless', name:'祝福', icon:'✨', desc:'ユウの与ダメ+25%（3T）', buff:'atkUp', uses:1 },
+    { id:'cleanse', name:'清め', icon:'🧼', desc:'状態異常を解除＋再生', cleanse:true, uses:1 },
+  ],
+};
+
+const COMMON = [
+  { id:'attack', name:'攻撃', icon:'⚔', desc:'通常攻撃', base:4 },
+  { id:'guard', name:'防御', icon:'🛡', desc:'ブロック8', block:8 },
+  { id:'charge', name:'ためる', icon:'⏫', desc:'テンション+2／ブロック4', charge:true, block:4 },
 ];
 
-const RELICS = [
-  { id: 'echo', name: '連鎖の護符', desc: '攻撃のたび他部位に4' },
-  { id: 'overload', name: '過負荷', desc: '落とした首1本で与ダメ+12%' },
-  { id: 'venom', name: '毒の心臓', desc: '毒ダメージ+50%' },
+const ORDERS = [
+  { id:'cheer', name:'意気昂揚', cost:0, desc:'テンション+1' },
+  { id:'analyze', name:'精密解析', cost:1, desc:'弱点+20%' },
+  { id:'dodge', name:'絶対回避', cost:2, desc:'被弾1回無効' },
+  { id:'again', name:'命令再起', cost:2, desc:'追加行動' },
 ];
 
-function createBattle() {
+const SCENARIOS = {
+  early: {
+    name:'序盤 1戦目', tip:'まずは敵の意図を見る。盾で受けるか、火力で攻めるか。',
+    tension:{ gald:0, yu:0, sera:0 },
+    foes:[
+      { id:'e1', name:'スライム', img:'/assets/enemies/slime.png', hp:22, atk:5, def:0,
+        pattern:[{type:'attack',value:6},{type:'attack',value:6},{type:'defend',block:6}] },
+      { id:'e2', name:'コウモリ', img:'/assets/enemies/bat.png', hp:18, atk:6, def:0,
+        pattern:[{type:'attack',value:7},{type:'attack',value:7},{type:'defend',block:4}] },
+    ],
+  },
+  late: {
+    name:'終盤 入口', tip:'テンションを貯めて必殺。毒・封印・麻痺に注意。',
+    tension:{ gald:2, yu:2, sera:1 },
+    foes:[
+      { id:'l1', name:'瘴気の虫', img:'/assets/enemies/tsumuri.png', hp:38, atk:9, def:2,
+        pattern:[{type:'poison',value:4},{type:'attack',value:10},{type:'big',value:18}] },
+      { id:'l2', name:'火の首', img:'/assets/enemies/baby_dragon.png', hp:44, atk:11, def:2,
+        pattern:[{type:'attack',value:12},{type:'big',value:22},{type:'defend',block:10}] },
+      { id:'l3', name:'呪いの腕', img:'/assets/enemies/cursed_armor.png', hp:36, atk:8, def:1,
+        pattern:[{type:'seal',value:0},{type:'attack',value:9},{type:'paralyze',value:0}] },
+    ],
+  },
+};
+
+/* ================= 状態 ================= */
+let G = null;
+const P = { playing:false, queue:[], done:null, feed:[], view:null, fx:null, stepTimer:null, typeTimer:null, phaseText:null };
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const pct = (n, max) => Math.max(0, Math.min(100, Math.round((n / max) * 100)));
+
+function createGame(key) {
+  const sc = SCENARIOS[key];
+  const members = MEMBERS.map((m) => ({
+    ...m, maxHp:m.hp, hp:m.hp, block:0,
+    tension: sc.tension[m.id] || 0,
+    statuses:{}, acted:false, hitThisRound:false,
+  }));
+  const foes = sc.foes.map((f) => ({
+    ...f, maxHp:f.hp, block:0, statuses:{}, analyzed:false,
+    patternIdx:1, intent:f.pattern[0],
+  }));
+  const uses = {};
+  for (const m of MEMBERS) {
+    uses[m.id] = {};
+    for (const s of SKILLS[m.id]) if (s.uses) uses[m.id][s.id] = s.uses;
+  }
   return {
-    round: 1,
-    hero: { hp: 120, maxHp: 120, guard: false, poison: 0, poisonDmg: 0, burn: 0, burnDmg: 0 },
-    heads: HEADS.map((h) => ({ ...h, hp: h.maxHp, poisonTurns: 0, poisonDmg: 0, shock: 0, broken: false })),
-    uses: { left: 3, arm: 3, fang: 2, relic: 2 },
-    used: [],
-    targetId: 'h1',
-    status: null,
-    events: [],
-    log: [],
+    key, sc, round:1, side:'ally', phase:'setup', actorIdx:0,
+    members, foes, uses, targetId:foes[0].id,
+    taunt:0, orderUsed:false, ordersUsed:{ analyze:false, dodge:false, again:false },
+    extra:false, auto:false, over:null,
   };
 }
 
-const aliveHeads = (b) => b.heads.filter((h) => !h.broken);
-const brokenCount = (b) => b.heads.length - aliveHeads(b).length;
-
-function multOf(b, head) {
-  let m = 1 + 0.12 * brokenCount(b);
-  if (head && head.poisonTurns > 0) m *= 1.15;
-  if (head && head.shock > 0) m *= 1.25;
-  return m;
-}
-
-function snap(b) {
-  const heads = {};
-  for (const h of b.heads) heads[h.id] = h.hp;
-  return { hero: b.hero.hp, heads };
-}
-
-function emit(b, text, fx = null, extra = {}) {
-  b.log.push(text);
-  b.events.push({ text, fx, hp: snap(b), ...extra });
-}
-
-function breakHead(b, head) {
-  if (head.broken) return;
-  head.broken = true;
-  head.poisonTurns = 0;
-  head.shock = 0;
-  emit(b, `[破壊] ${head.name}を落とした！ 与ダメージ +12%`);
-}
-
-function echo(b, from) {
-  const other = b.heads.find((h) => !h.broken && h.id !== from.id);
-  if (!other) return;
-  other.hp = Math.max(0, other.hp - 4);
-  emit(b, `[護符] ${other.name}に 4`, { side: 'head', id: other.id, dmg: 4, kind: 'chain' });
-  if (other.hp === 0) breakHead(b, other);
-}
-
-function hitHead(b, head, base, label) {
-  if (!head || head.broken) return;
-  const m = multOf(b, head);
-  const crit = Math.random() < 0.15;
-  const dmg = Math.max(1, Math.round(base * m * (crit ? 1.8 : 1) * (0.94 + Math.random() * 0.12)));
-  head.hp = Math.max(0, head.hp - dmg);
-  emit(
-    b,
-    `${label} ${head.name}に ${dmg} ダメージ${crit ? '（会心）' : ''}`,
-    { side: 'head', id: head.id, dmg, kind: 'dmg', crit },
-    { mult: m, crit }
-  );
-  if (head.hp === 0) breakHead(b, head);
-  echo(b, head);
-}
-
-function hitHero(b, base, label, head, big = false) {
-  const m = b.hero.guard ? 0.4 : 1;
-  const dmg = Math.max(1, Math.round(base * m * (0.95 + Math.random() * 0.1)));
-  b.hero.hp = Math.max(0, b.hero.hp - dmg);
-  emit(b, `${label} ガルドに ${dmg} ダメージ${b.hero.guard ? '（防御）' : ''}`, { side: 'hero', id: 'hero', dmg, kind: 'dmg' });
-  if (head && !big && b.hero.hp > 0) {
-    if (head.id === 'h2') { b.hero.burn = 2; b.hero.burnDmg = 6; emit(b, '燃えている（6×2ターン）'); }
-    if (head.id === 'h3') { b.hero.poison = 3; b.hero.poisonDmg = 5; emit(b, '毒を受けた（5×3ターン）'); }
+/* ================= 状態異常 ================= */
+const STATUS_NAME = { poison:'毒', paralysis:'麻痺', seal:'封印', atkUp:'攻撃↑', regen:'再生', dodge:'回避' };
+function has(t, id) { const s = t.statuses[id]; return !!(s && s.turns > 0); }
+function addStatus(t, id, turns, extra = {}) { t.statuses[id] = { turns, ...extra }; }
+function cleanDebuffs(t) { delete t.statuses.poison; delete t.statuses.paralysis; delete t.statuses.seal; }
+function tickStatuses(t, ev, isFoe) {
+  const s = t.statuses;
+  if (s.poison) {
+    const d = s.poison.value;
+    t.hp = Math.max(0, t.hp - d);
+    emit(ev, `毒が回る ${t.name}に ${d}`, { side:isFoe?'foe':'member', id:t.id, dmg:d, kind:'poison' });
+    if (t.hp <= 0) emit(ev, `${t.name}は倒れた…`, null, { kind:'bad' });
+  }
+  if (s.regen) {
+    const a = Math.min(s.regen.value, t.maxHp - t.hp);
+    t.hp += a;
+    emit(ev, `${t.name}は再生で ${a} 回復`, null, { kind:'good' });
+  }
+  for (const k of Object.keys(s)) {
+    if (k === 'dodge') continue;
+    s[k].turns -= 1;
+    if (s[k].turns <= 0) delete s[k];
   }
 }
 
-function checkStatus(b) {
-  if (b.hero.hp <= 0) b.status = 'lose';
-  else if (aliveHeads(b).length === 0) b.status = 'win';
-  return b.status;
+/* ================= 進行 ================= */
+function startScenario(key) {
+  G = createGame(key);
+  P.feed = [];
+  P.playing = false; P.queue = []; P.done = null; P.view = null; P.fx = null; P.phaseText = null;
+  clearTimers();
+  const ev = [header(SCENARIOS[key].name)];
+  emit(ev, SCENARIOS[key].tip, null, { kind:'good' });
+  play(ev, beginAllySetup);
 }
 
-function targetOf(b) {
-  return b.heads.find((h) => h.id === b.targetId && !h.broken) || aliveHeads(b)[0] || null;
+function beginAllySetup() {
+  if (G.over) return endBattle();
+  G.side = 'ally'; G.phase = 'setup'; G.orderUsed = false; G.extra = false;
+  const ev = [header('味方 セットアップ')];
+  emit(ev, `敵の意図：${intentLine()}`);
+  play(ev, beginAllyMain);
 }
 
-function act(b, slotId) {
-  b.events = [];
-  if (b.used.includes(slotId)) return null;
-  if (b.uses[slotId] !== undefined && b.uses[slotId] <= 0) return null;
-  const t = targetOf(b);
-  if (!t) return null;
+function beginAllyMain() {
+  if (G.over) return endBattle();
+  G.phase = 'main'; G.actorIdx = 0;
+  for (const m of G.members) m.acted = false;
+  play([header('味方 メイン')], nextActor);
+}
 
-  if (slotId === 'right') {
-    hitHead(b, t, 16, '右手の斬撃！');
-  } else if (slotId === 'left') {
-    hitHead(b, t, 10, '左手の連撃！');
-    hitHead(b, t, 10, '左手の連打！');
-  } else if (slotId === 'arm') {
-    hitHead(b, t, 20, '義手の雷撃！');
-    if (!t.broken) { t.shock = 2; emit(b, `[義手] ${t.name}が感電した（被ダメ+25%）`); }
-    const other = b.heads.find((h) => !h.broken && h.id !== t.id);
-    if (other) hitHead(b, other, 8, '雷が伝った！');
-  } else if (slotId === 'fang') {
-    hitHead(b, t, 6, '毒牙がかすめた！');
-    if (!t.broken) { t.poisonTurns = 3; t.poisonDmg = 8; emit(b, `${t.name}に毒が回った（8×3）`); }
-  } else if (slotId === 'relic') {
-    const p = t.poisonTurns * t.poisonDmg;
-    hitHead(b, t, 30 + p * 1.5, p > 0 ? '[遺物] 毒に反応して爆発！' : '[遺物] 爆発！');
-    t.poisonTurns = 0;
+function nextActor() {
+  if (G.over) return endBattle();
+  if (G.actorIdx >= G.members.length) { G.auto = false; beginAllyCleanup(); return; }
+  const m = G.members[G.actorIdx];
+  if (m.hp <= 0) { G.actorIdx += 1; nextActor(); return; }
+  if (has(m, 'paralysis')) {
+    delete m.statuses.paralysis;
+    const ev = [];
+    emit(ev, `${m.name}は麻痺で動けない`, null, { kind:'bad' });
+    play(ev, () => { G.actorIdx += 1; nextActor(); });
+    return;
+  }
+  m.acted = false;
+  render();
+  if (G.auto) setTimeout(autoStep, 300);
+}
+
+function act(id, auto = false) {
+  if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
+  const m = currentMember();
+  if (!m || m.hp <= 0) return;
+  if (!auto) G.auto = false;
+  const ev = [];
+  resolveAction(m, id, ev);
+  m.acted = true;
+  checkEnd();
+  play(ev, () => {
+    if (G.over) return endBattle();
+    if (G.extra) { G.extra = false; render(); if (G.auto) setTimeout(autoStep, 300); return; }
+    G.actorIdx += 1;
+    nextActor();
+  });
+}
+
+function beginAllyCleanup() {
+  if (G.over) return endBattle();
+  G.side = 'ally'; G.phase = 'cleanup'; G.auto = false;
+  const ev = [header('味方 クリーンアップ')];
+  for (const m of G.members) if (m.hp > 0) tickStatuses(m, ev, false);
+  for (const f of G.foes) if (f.block > 0) { f.block = 0; emit(ev, `${f.name}のブロックが解除された`, null, { kind:'block' }); }
+  checkEnd();
+  play(ev, () => { if (G.over) return endBattle(); beginEnemySetup(); });
+}
+
+function beginEnemySetup() {
+  if (G.over) return endBattle();
+  G.side = 'enemy'; G.phase = 'setup';
+  const ev = [header('敵 セットアップ')];
+  emit(ev, '敵が動き出す……');
+  play(ev, beginEnemyMain);
+}
+
+function beginEnemyMain() {
+  if (G.over) return endBattle();
+  G.phase = 'main';
+  const ev = [header('敵 メイン')];
+  for (const f of G.foes) if (f.hp > 0) resolveEnemyIntent(f, ev);
+  checkEnd();
+  play(ev, () => { if (G.over) return endBattle(); beginEnemyCleanup(); });
+}
+
+function beginEnemyCleanup() {
+  if (G.over) return endBattle();
+  G.phase = 'cleanup';
+  const ev = [header('敵 クリーンアップ')];
+  for (const f of G.foes) if (f.hp > 0) tickStatuses(f, ev, true);
+  for (const m of G.members) {
+    if (m.block > 0) m.block = 0;
+    delete m.statuses.dodge;
+  }
+  G.taunt = 0;
+  for (const f of G.foes) {
+    if (f.hp <= 0) continue;
+    f.intent = f.pattern[f.patternIdx % f.pattern.length];
+    f.patternIdx += 1;
+  }
+  for (const m of G.members) m.hitThisRound = false;
+  G.round += 1;
+  emit(ev, '味方のブロックが解除された', null, { kind:'block' });
+  checkEnd();
+  play(ev, () => { if (G.over) return endBattle(); beginAllySetup(); });
+}
+
+/* ================= 行動解決 ================= */
+function resolveAction(m, id, ev) {
+  const skill = allSkills(m).find((s) => s.id === id);
+  if (!skill) return;
+  const sealed = m.statuses.seal && m.statuses.seal.turns > 0 ? m.statuses.seal.skillId : null;
+  if (sealed === id) { emit(ev, `${m.name}は${skill.name}を封じられている`, null, { kind:'bad' }); return; }
+  if (skill.uses && (G.uses[m.id][id] || 0) <= 0) { emit(ev, `${skill.name}の使用回数がない`); return; }
+  if (skill.tension && m.tension < skill.tension) { emit(ev, `テンションが足りない`); return; }
+
+  if (skill.charge) {
+    m.tension = Math.min(6, m.tension + 2);
+    m.block += skill.block || 0;
+    emit(ev, `${m.name}は力をためた（テンション+2）`, null, { kind:'good' });
+  } else if (skill.taunt) {
+    G.taunt = 1;
+    m.block += skill.block || 0;
+    emit(ev, `${m.name}は挑発した（敵の狙いを自分に）`, null, { kind:'good' });
+  } else if (skill.heal) {
+    const t = lowestAlly();
+    const amt = Math.min(skill.heal, t.maxHp - t.hp);
+    t.hp += amt;
+    emit(ev, `${m.name}のいやし！ ${t.name}のHPが ${amt} 回復`, { side:'member', id:t.id, dmg:amt, kind:'heal' }, { kind:'good' });
+  } else if (skill.buff) {
+    const t = G.members.find((x) => x.id === 'yu') || m;
+    addStatus(t, 'atkUp', 3, { mult:1.25 });
+    emit(ev, `${m.name}の祝福！ ${t.name}の与ダメ+25%（3T）`, null, { kind:'good' });
+  } else if (skill.cleanse) {
+    const t = mostAfflicted();
+    cleanDebuffs(t);
+    addStatus(t, 'regen', 3, { value:6 });
+    emit(ev, `${m.name}の清め！ ${t.name}の状態を解除し、再生を付与`, null, { kind:'good' });
+  } else if (skill.base) {
+    if (skill.block) m.block += skill.block;
+    memberAttack(m, skill, ev);
+  } else if (skill.block) {
+    m.block += skill.block;
+    emit(ev, `${m.name}は身を守っている（ブロック+${skill.block}）`, null, { kind:'block' });
   }
 
-  if (b.uses[slotId] !== undefined) b.uses[slotId] -= 1;
-  b.used.push(slotId);
-  checkStatus(b);
-  return { events: b.events.slice(), status: b.status };
+  if (skill.uses) G.uses[m.id][id] -= 1;
 }
 
-function endTurn(b, guard = false) {
-  b.events = [];
-  if (guard) { b.hero.guard = true; emit(b, 'ガルドは身を守っている'); }
-
-  const big = b.round % 3 === 0;
-  if (big) {
-    emit(b, '3本の首が息を吸っている……大技！', null, { warn: true });
-    for (const h of aliveHeads(b)) {
-      if (b.hero.hp <= 0) break;
-      hitHero(b, Math.round(h.atk * 1.6), `${h.name}の大技！`, h, true);
+function memberAttack(m, skill, ev) {
+  const hits = skill.hits || 1;
+  for (let i = 0; i < hits; i += 1) {
+    let target = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || G.foes.find((f) => f.hp > 0);
+    if (!target) return;
+    let raw = skill.base + m.atk * 0.5;
+    if (has(m, 'atkUp')) raw *= 1.25;
+    if (target.analyzed) { raw *= 1.2; target.analyzed = false; }
+    const crit = Math.random() < 0.15;
+    if (crit) raw *= 1.8;
+    raw = Math.round(raw);
+    if (target.block > 0) {
+      const a = Math.min(target.block, raw);
+      target.block -= a; raw -= a;
+      emit(ev, `${target.name}のブロックが ${a} 軽減`, null, { kind:'block' });
     }
-  } else {
-    for (const h of aliveHeads(b)) {
-      if (b.hero.hp <= 0) break;
-      hitHero(b, h.atk + rnd(-1, 2), `${h.name}の攻撃！`, h);
+    if (raw > 0) target.hp = Math.max(0, target.hp - raw);
+    emit(ev, `${m.name}の${skill.name}！ ${target.name}に ${raw} ダメージ${crit ? '（会心）' : ''}`,
+      { side:'foe', id:target.id, dmg:raw, kind:'dmg', crit });
+    if (target.hp <= 0) {
+      emit(ev, `${target.name}を倒した！`, null, { kind:'good' });
+      if (G.targetId === target.id) G.targetId = (G.foes.find((f) => f.hp > 0) || {}).id;
     }
   }
-
-  // 首の毒
-  for (const h of b.heads) {
-    if (h.broken || h.poisonTurns <= 0) continue;
-    const d = Math.round(h.poisonDmg * 1.5);
-    h.hp = Math.max(0, h.hp - d);
-    emit(b, `毒が回っている ${h.name}に ${d}`, { side: 'head', id: h.id, dmg: d, kind: 'poison' });
-    h.poisonTurns -= 1;
-    if (h.hp === 0) breakHead(b, h);
-  }
-  // 感電の残り
-  for (const h of b.heads) if (h.shock > 0) h.shock -= 1;
-
-  // 主人公の状態
-  if (b.hero.hp > 0 && b.hero.poison > 0) {
-    b.hero.hp = Math.max(0, b.hero.hp - b.hero.poisonDmg);
-    emit(b, `毒で ${b.hero.poisonDmg} ダメージ`, { side: 'hero', id: 'hero', dmg: b.hero.poisonDmg, kind: 'poison' });
-    b.hero.poison -= 1;
-  }
-  if (b.hero.hp > 0 && b.hero.burn > 0) {
-    b.hero.hp = Math.max(0, b.hero.hp - b.hero.burnDmg);
-    emit(b, `燃えて ${b.hero.burnDmg} ダメージ`, { side: 'hero', id: 'hero', dmg: b.hero.burnDmg, kind: 'poison' });
-    b.hero.burn -= 1;
-  }
-
-  checkStatus(b);
-  if (!b.status && (b.round + 1) % 3 === 0) {
-    emit(b, '首が息を吸っている（次のラウンド大技）', null, { warn: true });
-  }
-  return { events: b.events.slice(), status: b.status };
 }
 
-/* ================= UI ================= */
+function resolveEnemyIntent(f, ev) {
+  const i = f.intent;
+  if (i.type === 'defend') {
+    f.block += i.block || 8;
+    emit(ev, `${f.name}は身を守っている（ブロック+${i.block || 8}）`, null, { kind:'block' });
+    return;
+  }
+  if (i.type === 'poison') {
+    const t = pickAlly(); if (!t) return;
+    addStatus(t, 'poison', 3, { value:i.value || 4 });
+    emit(ev, `${f.name}の毒！ ${t.name}に毒（${i.value || 4}×3）`, null, { kind:'bad' });
+    return;
+  }
+  if (i.type === 'seal') {
+    const t = pickAlly(); if (!t) return;
+    const sid = pickSealable(t);
+    addStatus(t, 'seal', 2, { skillId:sid });
+    emit(ev, `${f.name}の封印！ ${t.name}の「${skillName(t, sid)}」が使えない`, null, { kind:'bad' });
+    return;
+  }
+  if (i.type === 'paralyze') {
+    const t = pickAlly(); if (!t) return;
+    addStatus(t, 'paralysis', 1, {});
+    emit(ev, `${f.name}の麻痺！ ${t.name}は次の行動ができない`, null, { kind:'bad' });
+    return;
+  }
+  const taunted = G.taunt > 0 ? G.members.find((x) => x.id === 'gald' && x.hp > 0) : null;
+  const t = taunted || pickAlly();
+  if (!t) return;
+  const dmg = Math.max(1, i.value - t.def);
+  damageMember(t, dmg, ev, f);
+}
+
+function damageMember(t, dmg, ev, source) {
+  if (has(t, 'dodge')) {
+    delete t.statuses.dodge;
+    emit(ev, `${t.name}は攻撃を回避した`, null, { kind:'good' });
+    return;
+  }
+  let remaining = dmg;
+  if (t.block > 0) {
+    const a = Math.min(t.block, remaining);
+    t.block -= a; remaining -= a;
+    emit(ev, `${t.name}のブロックが ${a} 軽減`, null, { kind:'block' });
+  }
+  if (remaining > 0) {
+    t.hp = Math.max(0, t.hp - remaining);
+    if (!t.hitThisRound) { t.hitThisRound = true; t.tension = Math.min(6, t.tension + 1); }
+    emit(ev, `${source.name}の攻撃！ ${t.name}に ${remaining} ダメージ`,
+      { side:'member', id:t.id, dmg:remaining, kind:'dmg' });
+    if (t.hp <= 0) emit(ev, `${t.name}は倒れた…`, null, { kind:'bad' });
+  }
+}
+
+/* ================= 入力 ================= */
+function currentMember() {
+  if (!G || G.side !== 'ally' || G.phase !== 'main') return null;
+  return G.members[G.actorIdx] || null;
+}
+function allSkills(m) { return [...SKILLS[m.id], ...COMMON]; }
+function aliveFoes() { return G.foes.filter((f) => f.hp > 0); }
+function lowestAlly() {
+  return G.members.filter((m) => m.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || G.members[0];
+}
+function mostAfflicted() {
+  const alive = G.members.filter((m) => m.hp > 0);
+  return alive.sort((a, b) => countDebuffs(b) - countDebuffs(a))[0] || alive[0];
+}
+function countDebuffs(m) {
+  return ['poison', 'paralysis', 'seal'].filter((k) => has(m, k)).length;
+}
+function pickAlly() {
+  const alive = G.members.filter((m) => m.hp > 0);
+  return alive.length ? alive[rnd(0, alive.length - 1)] : null;
+}
+function pickSealable(t) {
+  const list = SKILLS[t.id].filter((s) => !s.uses || (G.uses[t.id][s.id] || 0) > 0);
+  return list.length ? list[rnd(0, list.length - 1)].id : 'attack';
+}
+function skillName(t, sid) {
+  const s = allSkills(t).find((x) => x.id === sid);
+  return s ? s.name : sid;
+}
+function canUse(m, sid) {
+  const s = SKILLS[m.id].find((x) => x.id === sid);
+  if (!s) return false;
+  if (s.uses && (G.uses[m.id][sid] || 0) <= 0) return false;
+  if (m.statuses.seal && m.statuses.seal.skillId === sid) return false;
+  if (s.tension && m.tension < s.tension) return false;
+  return true;
+}
+
+function useOrder(id) {
+  if (!G || G.side !== 'ally' || G.phase !== 'main' || P.playing || G.over) return;
+  const m = currentMember();
+  if (!m) return;
+  const o = ORDERS.find((x) => x.id === id);
+  if (!o || G.orderUsed || m.tension < o.cost) return;
+  if (id !== 'cheer' && G.ordersUsed[id]) return;
+  m.tension -= o.cost;
+  G.orderUsed = true;
+  if (id !== 'cheer') G.ordersUsed[id] = true;
+  G.auto = false;
+  const ev = [];
+  if (id === 'cheer') {
+    m.tension = Math.min(6, m.tension + 1);
+    emit(ev, `指揮官命令：意気昂揚！ ${m.name}のテンション+1`, null, { kind:'good' });
+  } else if (id === 'analyze') {
+    const t = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || aliveFoes()[0];
+    if (t) { t.analyzed = true; emit(ev, `指揮官命令：精密解析！ ${t.name}の弱点を突く（次の攻撃+20%）`, null, { kind:'good' }); }
+  } else if (id === 'dodge') {
+    addStatus(m, 'dodge', 1, {});
+    emit(ev, `指揮官命令：絶対回避！ ${m.name}は次の攻撃を避ける`, null, { kind:'good' });
+  } else if (id === 'again') {
+    G.extra = true;
+    emit(ev, `指揮官命令：命令再起！ ${m.name}はもう一度動ける`, null, { kind:'good' });
+  }
+  play(ev, () => render());
+}
+
+function autoStart() {
+  if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
+  G.auto = true;
+  autoStep();
+}
+function autoStep() {
+  if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
+  const m = currentMember();
+  if (!m) return;
+  act(chooseAuto(m), true);
+}
+function chooseAuto(m) {
+  if (m.id === 'sera') {
+    const low = lowestAlly();
+    if (low && low.hp / low.maxHp < 0.6 && canUse(m, 'heal')) return 'heal';
+    if (canUse(m, 'cleanse') && G.members.some((x) => x.hp > 0 && countDebuffs(x) > 0)) return 'cleanse';
+    if (canUse(m, 'bless')) return 'bless';
+    return 'attack';
+  }
+  if (m.id === 'yu') {
+    if (m.tension >= 3 && canUse(m, 'finisher')) return 'finisher';
+    if (canUse(m, 'double')) return 'double';
+    return 'attack';
+  }
+  if (canUse(m, 'taunt') && aliveFoes().length >= 2) return 'taunt';
+  if (canUse(m, 'bash')) return 'bash';
+  return 'attack';
+}
+
+/* ================= 表示 ================= */
 const app = document.getElementById('app');
-let b = createBattle();
-let playing = false;
-let queue = [];
-let feed = ['深部の主が現れた！'];
-let view = null;
-let fx = null;
-let pending = null;
-let pendingNextRound = false;
-let stepTimer = null;
-let typeTimer = null;
-let overlay = null;
-let statusOpen = false;
 
-const TYPE_MS = 14;
-const STEP_MS = 300;
-const STEP_PAD = 80;
-const FEED_MAX = 40;
+function mhp(m) { return P.view?.members?.[m.id]?.hp ?? m.hp; }
+function mblock(m) { return P.view?.members?.[m.id]?.block ?? m.block; }
+function mtension(m) { return P.view?.members?.[m.id]?.tension ?? m.tension; }
+function mstatuses(m) { return P.view?.members?.[m.id]?.statuses ?? m.statuses; }
+function fhp(f) { return P.view?.foes?.[f.id]?.hp ?? f.hp; }
+function fblock(f) { return P.view?.foes?.[f.id]?.block ?? f.block; }
+function fstatuses(f) { return P.view?.foes?.[f.id]?.statuses ?? f.statuses; }
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const pct = (hp, max) => Math.max(0, Math.min(100, Math.round((hp / max) * 100)));
-
-function hpAt(side, id, fallback) {
-  if (!view) return fallback;
-  if (side === 'hero') return view.hero;
-  return view.heads[id] !== undefined ? view.heads[id] : fallback;
+function pips(n) {
+  let out = '';
+  for (let i = 1; i <= 6; i += 1) out += `<i class="${i <= n ? 'on' : ''}"></i>`;
+  return out;
 }
-const fxAt = (side, id) => (fx && fx.side === side && fx.id === id ? [fx] : []);
-
-function chipFor(status) {
-  if (status.kind === 'poison') return `<span class="chip ok">${status.label}</span>`;
-  return `<span class="chip">${status.label}</span>`;
+function statusChips(st) {
+  return Object.keys(st || {}).filter((k) => st[k].turns > 0)
+    .map((k) => `<span class="st ${k}">${STATUS_NAME[k] || k}${st[k].turns}</span>`).join('');
+}
+function floatFor(side, id) {
+  if (!P.fx || P.fx.side !== side || P.fx.id !== id) return '';
+  const f = P.fx;
+  const cls = `${f.kind === 'heal' ? 'heal' : ''} ${f.crit ? 'big' : ''}`;
+  return `<div class="dmg-float ${cls}">${f.kind === 'heal' ? '+' : '-'}${f.dmg}</div>`;
+}
+function phaseLabel() {
+  return `${G.side === 'ally' ? '味方' : '敵'} ${G.phase === 'setup' ? 'セットアップ' : G.phase === 'main' ? 'メイン' : 'クリーンアップ'}`;
+}
+function intentText(f) {
+  const i = f.intent;
+  if (!i) return '—';
+  if (i.type === 'attack') return `攻撃 ${i.value}`;
+  if (i.type === 'big') return `大技 ${i.value}`;
+  if (i.type === 'poison') return `毒 ${i.value}×3`;
+  if (i.type === 'seal') return '封印';
+  if (i.type === 'paralyze') return '麻痺';
+  if (i.type === 'defend') return `防御 ${i.block || 8}`;
+  return '—';
+}
+function intentLine() {
+  const list = G.foes.filter((f) => f.hp > 0).map((f) => `${f.name}: ${intentText(f)}`);
+  return list.length ? list.join(' / ') : 'なし';
 }
 
-function render() {
-  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
-  const target = targetOf(b);
-  const mult = target ? multOf(b, target) : 1;
-  const alive = aliveHeads(b).length;
+function actionButtons(m) {
+  const sealed = m.statuses.seal && m.statuses.seal.skillId;
+  return allSkills(m).map((s) => {
+    const left = s.uses ? (G.uses[m.id][s.id] || 0) : null;
+    const dis = (left !== null && left <= 0) || sealed === s.id || (s.tension && m.tension < s.tension);
+    return `<button class="actbtn" data-act="skill" data-id="${s.id}" ${dis ? 'disabled' : ''}>
+      <div class="n">${s.icon} ${s.name}${sealed === s.id ? ' 🔒' : ''}</div>
+      <div class="d">${s.desc}</div>
+      <div class="u">${left === null ? '∞' : `残${left}`}${s.tension ? ` ・テン${s.tension}` : ''}</div>
+    </button>`;
+  }).join('');
+}
 
-  const relicChips = RELICS.map((r) => `<span class="chip gold">${esc(r.name)}</span>`).join('');
-  const heroStatus = [
-    b.hero.poison > 0 ? `<span class="chip ok">毒 ${b.hero.poison}</span>` : '',
-    b.hero.burn > 0 ? `<span class="chip red">火 ${b.hero.burn}</span>` : '',
-    b.hero.guard ? `<span class="chip cyan">防御</span>` : '',
-  ].join('');
+function orderButtons(m) {
+  return ORDERS.map((o) => {
+    const dis = G.orderUsed || m.tension < o.cost || (o.id !== 'cheer' && G.ordersUsed[o.id]);
+    const used = o.id !== 'cheer' && G.ordersUsed[o.id];
+    return `<button class="order" data-act="order" data-id="${o.id}" ${dis ? 'disabled' : ''}>
+      ${o.name}<span class="u">${used ? '済' : o.cost ? `テン${o.cost}` : '無料'}</span>
+    </button>`;
+  }).join('');
+}
 
-  const heads = b.heads.map((h) => {
-    const hp = hpAt('head', h.id, h.hp);
-    const st = [
-      h.poisonTurns > 0 ? `毒${h.poisonTurns}` : '',
-      h.shock > 0 ? `感電${h.shock}` : '',
-      h.broken ? '落ちた' : '',
-    ].filter(Boolean).join(' ');
-    const isTarget = b.targetId === h.id && !h.broken;
-    return `<div class="head ${isTarget ? 'target' : ''} ${h.broken ? 'broken' : ''} ${fx && fx.side === 'head' && fx.id === h.id && fx.kind === 'dmg' ? 'shake' : ''}"
-                 data-act="target" data-id="${h.id}">
-      <div class="hname">${esc(h.name)}<span>${esc(h.trait)}</span></div>
-      <div class="hbar"><i style="width:${pct(hp, h.maxHp)}%"></i></div>
-      <div class="st">${st}</div>
-      ${fxAt('head', h.id).map((x) => `<div class="dmg-float ${x.kind === 'chain' ? 'chain' : ''} ${x.crit ? 'big' : ''}">${x.crit ? '会心 ' : ''}-${x.dmg}</div>`).join('')}
+function battleHtml() {
+  const actor = currentMember();
+  const canAct = G.side === 'ally' && G.phase === 'main' && !P.playing && actor && actor.hp > 0;
+
+  const foes = G.foes.map((f) => {
+    const hp = fhp(f);
+    return `<div class="foe ${G.targetId === f.id ? 'target' : ''} ${hp <= 0 ? 'dead' : ''} ${P.fx && P.fx.side === 'foe' && P.fx.id === f.id && P.fx.kind === 'dmg' ? 'shake' : ''}"
+                 data-act="target" data-id="${f.id}">
+      <img src="${f.img}" alt="">
+      <div class="name">${esc(f.name)}</div>
+      <div class="intent">${hp > 0 ? intentText(f) : '—'}</div>
+      <div class="bar"><i style="width:${pct(hp, f.maxHp)}%"></i></div>
+      <div class="nums"><span>HP ${hp}</span><span>${fblock(f) > 0 ? `🛡${fblock(f)}` : ''}</span></div>
+      <div class="chips">${statusChips(fstatuses(f))}</div>
+      ${floatFor('foe', f.id)}
     </div>`;
   }).join('');
 
-  const heroHp = hpAt('hero', 'hero', b.hero.hp);
-
-  const slots = SLOTS.map((s) => {
-    const left = b.uses[s.id] === undefined ? null : b.uses[s.id];
-    const used = b.used.includes(s.id) || (left !== null && left <= 0);
-    return `<button class="slot ${s.id === 'relic' ? 'hot' : ''}" data-act="slot" data-id="${s.id}" ${used || playing || b.status ? 'disabled' : ''}>
-      <div class="icon">${s.icon}</div>
-      <div class="label">${s.label}</div>
-      <div class="uses">${left === null ? '∞' : `${left}回`}</div>
-    </button>`;
+  const party = G.members.map((m) => {
+    const hp = mhp(m);
+    const active = canAct && actor.id === m.id;
+    return `<div class="pc ${active ? 'active' : ''} ${hp <= 0 ? 'down' : ''} ${P.fx && P.fx.side === 'member' && P.fx.id === m.id && P.fx.kind === 'dmg' ? 'shake' : ''}">
+      <div class="head"><img src="${m.img}" alt=""><div><div class="name">${m.name}</div><div class="role">${m.role}</div></div></div>
+      <div class="bar ${hp / m.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(hp, m.maxHp)}%"></i></div>
+      <div class="nums"><span>${hp}/${m.maxHp}</span><span>${mblock(m) > 0 ? `🛡${mblock(m)}` : ''}</span></div>
+      <div class="pips">${pips(mtension(m))}</div>
+      <div class="chips">${statusChips(mstatuses(m))}</div>
+      ${floatFor('member', m.id)}
+    </div>`;
   }).join('');
 
-  const logHtml = feed.map((l) => `<div class="${l.startsWith('首が息') ? 'warn' : ''}">${esc(l)}</div>`).join('');
+  const log = P.feed.map((f) => `<div class="${f.phase ? 'phase' : ''} ${f.kind || ''}">${esc(f.text)}</div>`).join('');
+  const phase = (P.playing && P.phaseText) ? P.phaseText : phaseLabel();
+  const sideCls = phase.startsWith('味方') ? 'ally' : 'enemy';
 
-  const canAct = !playing && !b.status;
-
-  app.innerHTML = `
-    <div class="topbar">
-      <span>R<b>${b.round}</b></span>
-      <span>首 <b>${alive}/3</b></span>
+  return `<div class="topbar">
+      <span class="phase ${sideCls}">${phase}</span>
+      <span>R<b>${G.round}</b></span>
+      <span>${esc(G.sc.name)}</span>
       <span class="spacer"></span>
-      <button class="chip" data-act="status" ${playing ? 'disabled' : ''}>つよさ</button>
-      <button class="chip" data-act="reset">やり直す</button>
+      <button class="chipbtn" data-act="restart">やり直す</button>
     </div>
-    <div class="topbar">
-      <span class="mult">×${mult.toFixed(2)}<small>倍率</small></span>
-      <span class="spacer"></span>
-      <span>対象: <b>${esc(target ? target.name : '—')}</b></span>
+    <div class="foes">${foes}</div>
+    <div class="party">${party}</div>
+    <div class="actorline">${canAct
+      ? `<b>${actor.name}</b> の行動（${G.actorIdx + 1}/3）`
+      : P.playing ? '演出中…' : G.over ? '' : `${G.side === 'ally' ? '味方' : '敵'}の処理中…`}</div>
+    <div class="actions">${canAct ? actionButtons(actor) : ''}</div>
+    <div class="orders">${canAct ? orderButtons(actor) : ''}</div>
+    ${canAct ? '<button class="chipbtn" data-act="auto" style="align-self:flex-end">おまかせ</button>' : ''}
+    <div class="log ${P.playing ? 'clickable' : ''}" ${P.playing ? 'data-act="skip"' : ''}>${log}</div>
+    <p class="note">3体・セットアップ→メイン→クリーンアップ／ブロックは相手のクリーンアップで0<br>演出中にタップで早送り。敵をタップで対象変更。</p>
+    ${G.over && !P.playing ? overlayHtml() : ''}`;
+}
+
+function overlayHtml() {
+  const win = G.over === 'win';
+  const alive = G.members.filter((m) => m.hp > 0).length;
+  return `<div class="overlay"><div class="sheet ${win ? 'win' : 'lose'}">
+    <h2>${win ? '勝利' : '全滅'}</h2>
+    <p>R${G.round}・生存 ${alive}/3・${esc(G.sc.name)}</p>
+    <button class="btn primary" data-act="again">もう一度</button>
+    <button class="btn ghost" data-act="selectbtn">シナリオ選択</button>
+  </div></div>`;
+}
+
+function selectHtml() {
+  return `<h1 class="title">バトル試作</h1>
+    <p class="sub">3体・セットアップ → メイン → クリーンアップ</p>
+    <div class="select">
+      <button class="scard" data-act="select" data-key="early">
+        <h3>序盤 1戦目</h3>
+        <p>スライムとコウモリ。まずは「意図を見る → 盾で受ける → 火力で攻める」の流れ。<br>HP55/38/32・テンション0から。</p>
+      </button>
+      <button class="scard" data-act="select" data-key="late">
+        <h3>終盤 入口</h3>
+        <p>3体の敵。毒・封印・麻痺と大技。テンションを貯めて必殺を撃つ。<br>HPは同じだが、テンション2から開始。</p>
+      </button>
     </div>
-    <div class="relics">${relicChips}</div>
+    <p class="note">ブロックは相手の次のクリーンアップで0。敵の意図は敵クリーンアップで決まり、味方セットアップで公開。<br>旧ボス試作は <a href="/proto-boss.html" style="color:#8fd3ff">/proto-boss.html</a>。</p>`;
+}
 
-    <div class="boss">
-      <div class="art"></div>
-      <div class="heads">${heads}</div>
-    </div>
-
-    <div class="hero ${fx && fx.side === 'hero' && fx.kind === 'dmg' ? 'shake' : ''}">
-      <div class="row">
-        <img src="/assets/hero.png" alt="">
-        <div class="bar ${heroHp / b.hero.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(heroHp, b.hero.maxHp)}%"></i></div>
-        <span class="hptext">${heroHp} / ${b.hero.maxHp}</span>
-      </div>
-      <div class="chips">${heroStatus}</div>
-      ${fxAt('hero', 'hero').map((x) => `<div class="dmg-float">-${x.dmg}</div>`).join('')}
-    </div>
-
-    <div class="slots">${slots}</div>
-
-    <div class="log ${playing ? 'clickable' : ''}" ${playing ? 'data-act="skip"' : ''}>${logHtml}</div>
-
-    <div class="acts">
-      <button class="btn primary" data-act="auto" ${canAct ? '' : 'disabled'}>おまかせ</button>
-      <button class="btn" data-act="guard" ${canAct ? '' : 'disabled'}>防御して終了</button>
-      <button class="btn ghost span2" data-act="end" ${canAct ? '' : 'disabled'}>このラウンドを終える</button>
-    </div>
-    <p class="note">
-      プロトタイプ：1体・5スロット／首を落とすと与ダメ+12%／毒→爆発・雷→感電の掛け合わせ<br>
-      演出中にタップで早送り。対象の首をタップで切り替え。「つよさ」でビルドの内訳。
-    </p>
-    ${overlay ? overlayHtml() : ''}
-    ${statusOpen ? statusHtml() : ''}
-  `;
-
+function render() {
+  if (P.typeTimer) { clearInterval(P.typeTimer); P.typeTimer = null; }
+  if (!G) { app.innerHTML = selectHtml(); return; }
+  app.innerHTML = battleHtml();
   const box = app.querySelector('.log');
   if (box) box.scrollTop = box.scrollHeight;
 }
 
-function overlayHtml() {
-  return `<div class="overlay"><div class="sheet ${overlay.cls}">
-    <h2>${overlay.title}</h2>
-    <p>${overlay.text}</p>
-    <button class="btn primary" data-act="reset">もう一度</button>
-  </div></div>`;
-}
-
-const SLOT_BASE = { right: 16, left: 10, arm: 20, fang: 6, relic: 30 };
-
-function statusHtml() {
-  const target = targetOf(b);
-  const multNow = target ? multOf(b, target) : 1;
-  const broken = brokenCount(b);
-
-  const slotRows = SLOTS.map((s) => {
-    const left = b.uses[s.id] === undefined ? '∞' : `${b.uses[s.id]}回`;
-    const used = b.used.includes(s.id);
-    const eff = Math.round(SLOT_BASE[s.id] * multNow);
-    return `<li class="${used ? 'used' : ''}">
-      <span>${s.icon}</span>
-      <span>${s.label}</span>
-      <span class="ds">${esc(s.desc)} ・今 <b>${eff}</b></span>
-      <span class="us">${used ? '使用済' : left}</span>
-    </li>`;
-  }).join('');
-
-  const relicRows = RELICS.map((r) => `<li>
-      <span>◆</span>
-      <span>${esc(r.name)}</span>
-      <span class="ds">${esc(r.desc)}</span>
-      <span class="us">常時</span>
-    </li>`).join('');
-
-  const parts = [
-    broken ? `首の破壊 ×${broken}（与ダメ +${broken * 12}%）` : '',
-    target && target.poisonTurns > 0 ? `毒（被ダメ +15%）` : '',
-    target && target.shock > 0 ? `感電（被ダメ +25%）` : '',
-  ].filter(Boolean);
-
-  const heroStatus = [
-    b.hero.poison > 0 ? `毒 残り${b.hero.poison}（${b.hero.poisonDmg}/R）` : '',
-    b.hero.burn > 0 ? `火 残り${b.hero.burn}（${b.hero.burnDmg}/R）` : '',
-    b.hero.guard ? '防御中' : '',
-  ].filter(Boolean);
-
-  return `<div class="overlay" data-act="close-status"><div class="sheet status" data-act="stay">
-    <h2>ガルド</h2>
-    <div class="statgrid">
-      <div><b>${b.hero.hp}/${b.hero.maxHp}</b>HP</div>
-      <div><b>×${multNow.toFixed(2)}</b>現在の倍率</div>
-      <div><b>${broken}/3</b>落とした首</div>
-    </div>
-
-    <h3>状態</h3>
-    <div class="breakdown">${heroStatus.length ? heroStatus.map((x) => `・${x}`).join('<br>') : '・なし'}</div>
-
-    <h3>スロット（行動）</h3>
-    <ul class="slist">${slotRows}</ul>
-
-    <h3>遺物</h3>
-    <ul class="slist">${relicRows}</ul>
-
-    <h3>倍率の内訳（掛け算）</h3>
-    <div class="breakdown">
-      ${parts.length ? parts.map((p) => `・${p}`).join('<br>') : '・今は補正なし'}
-      <br>→ 合計 <b>×${multNow.toFixed(2)}</b>${target ? `（対象: ${esc(target.name)}）` : ''}
-    </div>
-
-    <h3>戦い方のヒント</h3>
-    <div class="breakdown">
-      ・毒牙 → 爆発 で大ダメージ<br>
-      ・雷撃で感電 → 他の攻撃が +25%<br>
-      ・首を落とすほど全体の与ダメが上がる
-    </div>
-
-    <div class="close-row"><button class="btn primary" data-act="close-status">閉じる</button></div>
-  </div></div>`;
-}
-
-/* ---- 再生 ---- */
+/* ================= 再生 ================= */
 function clearTimers() {
-  if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
-  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+  if (P.stepTimer) { clearTimeout(P.stepTimer); P.stepTimer = null; }
+  if (P.typeTimer) { clearInterval(P.typeTimer); P.typeTimer = null; }
 }
-
+function entry(text, kind = null) { return { text, kind, snap:null, fx:null }; }
+function header(text) { return { text, phase:true, kind:null, snap:snap(), fx:null }; }
+function snap() {
+  const members = {};
+  for (const m of G.members) members[m.id] = { hp:m.hp, block:m.block, tension:m.tension, statuses:{ ...m.statuses } };
+  const foes = {};
+  for (const f of G.foes) foes[f.id] = { hp:f.hp, block:f.block, statuses:{ ...f.statuses } };
+  return { members, foes };
+}
+function emit(ev, text, fx = null, opts = {}) {
+  ev.push({ text, fx, kind:opts.kind || null, snap:snap() });
+}
+function play(events, done) {
+  if (!events || !events.length) { if (done) done(); return; }
+  P.playing = true;
+  P.queue = events.slice();
+  P.done = done || null;
+  P.fx = null; P.view = null;
+  nextEvent();
+}
+function nextEvent() {
+  if (!P.playing) return;
+  const ev = P.queue.shift();
+  if (!ev) { finishPlay(); return; }
+  if (ev.phase) P.phaseText = ev.text;
+  P.feed.push(ev);
+  if (P.feed.length > 90) P.feed.shift();
+  P.view = ev.snap || null;
+  P.fx = ev.fx || null;
+  render();
+  const typed = ev.phase ? 0 : typeLine(ev.text);
+  P.stepTimer = setTimeout(nextEvent, Math.max(240, typed + 60));
+}
 function typeLine(text) {
-  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+  if (P.typeTimer) { clearInterval(P.typeTimer); P.typeTimer = null; }
   const el = app.querySelector('.log div:last-child');
   if (!el) return 0;
   el.textContent = '';
   let i = 0;
-  typeTimer = setInterval(() => {
+  P.typeTimer = setInterval(() => {
     i += 1;
     el.textContent = text.slice(0, i);
     const box = app.querySelector('.log');
     if (box) box.scrollTop = box.scrollHeight;
-    if (i >= text.length) { clearInterval(typeTimer); typeTimer = null; }
-  }, TYPE_MS);
-  return text.length * TYPE_MS;
+    if (i >= text.length) { clearInterval(P.typeTimer); P.typeTimer = null; }
+  }, 13);
+  return text.length * 13;
 }
-
-function startPlayback(events, status) {
+function skipPlay() {
+  if (!P.playing) return;
+  for (const ev of P.queue) {
+    P.feed.push(ev);
+    if (ev.snap) P.view = ev.snap;
+    if (ev.fx) P.fx = ev.fx;
+  }
+  P.queue = [];
+  finishPlay();
+}
+function finishPlay() {
   clearTimers();
-  pending = status || null;
-  queue = events.slice();
-  playing = true;
-  fx = null;
-  view = null;
-  nextStep();
-}
-
-function nextStep() {
-  if (!playing) return;
-  const ev = queue.shift();
-  if (!ev) { finishPlayback(); return; }
-  feed.push(ev.text);
-  if (feed.length > FEED_MAX) feed.splice(0, feed.length - FEED_MAX);
-  view = ev.hp;
-  fx = ev.fx;
+  P.playing = false;
+  P.view = null;
+  P.fx = null;
+  const d = P.done; P.done = null;
   render();
-  const typed = typeLine(ev.text);
-  stepTimer = setTimeout(nextStep, Math.max(STEP_MS, typed + STEP_PAD));
+  if (d) d();
 }
 
-function skipPlayback() {
-  if (!playing) return;
-  for (const ev of queue) {
-    feed.push(ev.text);
-    if (ev.fx) fx = ev.fx;
-    view = ev.hp;
-  }
-  if (feed.length > FEED_MAX) feed.splice(0, feed.length - FEED_MAX);
-  queue = [];
-  finishPlayback();
+function checkEnd() {
+  if (G.over) return;
+  if (G.foes.every((f) => f.hp <= 0)) G.over = 'win';
+  else if (G.members.every((m) => m.hp <= 0)) G.over = 'lose';
 }
-
-function finishPlayback() {
+function endBattle() {
   clearTimers();
-  playing = false;
-  queue = [];
-  fx = null;
-  view = null;
-  const status = pending;
-  pending = null;
-  if (status) {
-    b.status = status;
-    overlay = status === 'win'
-      ? { cls: 'win', title: '深部の主を倒した', text: `R${b.round}・落とした首 ${brokenCount(b)}/3・残りHP ${b.hero.hp}` }
-      : { cls: 'lose', title: '全滅', text: `R${b.round}・落とした首 ${brokenCount(b)}/3` };
-  } else if (pendingNextRound) {
-    b.round += 1;
-    b.used = [];
-    b.hero.guard = false;
-  }
-  pendingNextRound = false;
+  P.playing = false;
+  P.queue = [];
+  P.done = null;
+  P.view = null;
+  P.fx = null;
   render();
 }
 
-/* ---- 進行 ---- */
-function afterPlayerAction(res) {
-  if (!res) return;
-  if (res.events.length === 0) { render(); return; }
-  startPlayback(res.events, res.status);
-}
-
-function endRound(guard = false) {
-  const res = endTurn(b, guard);
-  pendingNextRound = !b.status;
-  startPlayback(res.events, res.status);
-}
-
-function autoTurn() {
-  const events = [];
-  for (const s of SLOTS) {
-    if (b.used.includes(s.id)) continue;
-    if (b.uses[s.id] !== undefined && b.uses[s.id] <= 0) continue;
-    const r = act(b, s.id);
-    if (r) events.push(...r.events);
-    if (b.status) break;
-  }
-  if (!b.status) {
-    const r = endTurn(b, false);
-    events.push(...r.events);
-    if (!b.status) pendingNextRound = true;
-  }
-  if (events.length) startPlayback(events, b.status);
-  else render();
-}
-
-/* ---- 入力 ---- */
+/* ================= 入力 ================= */
 app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el) return;
   e.preventDefault();
-  const actName = el.dataset.act;
-  if (actName === 'stay') return;
-  if (actName === 'status') { statusOpen = true; render(); return; }
-  if (actName === 'close-status') { statusOpen = false; render(); return; }
-  if (playing) { skipPlayback(); return; }
-  if (actName === 'reset') {
-    b = createBattle();
-    feed = ['深部の主が現れた！'];
-    overlay = null;
-    statusOpen = false;
-    fx = null;
-    view = null;
-    render();
+  const a = el.dataset.act;
+  if (P.playing) { skipPlay(); return; }
+  if (a === 'select') { startScenario(el.dataset.key); return; }
+  if (a === 'restart') { G = null; P.feed = []; render(); return; }
+  if (a === 'selectbtn') { G = null; render(); return; }
+  if (a === 'again') { startScenario(G.key); return; }
+  if (!G) return;
+  if (a === 'target') {
+    const f = G.foes.find((x) => x.id === el.dataset.id);
+    if (f && f.hp > 0) { G.targetId = f.id; render(); }
     return;
   }
-  if (actName === 'target') {
-    const h = b.heads.find((x) => x.id === el.dataset.id);
-    if (h && !h.broken) { b.targetId = h.id; render(); }
-    return;
-  }
-  if (b.status) return;
-  if (actName === 'slot') {
-    afterPlayerAction(act(b, el.dataset.id));
-    return;
-  }
-  if (actName === 'end') { endRound(false); return; }
-  if (actName === 'guard') { endRound(true); return; }
-  if (actName === 'auto') { autoTurn(); return; }
+  if (a === 'skill') { act(el.dataset.id); return; }
+  if (a === 'order') { useOrder(el.dataset.id); return; }
+  if (a === 'auto') { autoStart(); return; }
 });
 
 render();
