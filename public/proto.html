@@ -109,6 +109,14 @@ html, body {
 .actbtn .d { font-size:9px; color:var(--dim); margin-top:1px; }
 .actbtn .u { font-size:9px; color:var(--gold); margin-top:1px; }
 .orders { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.commander { border:1px solid #3a6fd855; background:#122647; border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:6px; }
+.cmd-title { font-size:11px; color:var(--gold); display:flex; justify-content:space-between; align-items:center; }
+.cmd-title span { color:var(--dim); font-size:9px; }
+.skipbtn { font-size:11px; padding:7px 8px; }
+.orderbar { font-size:10px; color:var(--dim); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.orderbar span { font-size:9px; color:#6f80a8; }
+.pc.reorderable { cursor:pointer; border-color:#3a6fd8; }
+.pc .qbadge { position:absolute; top:3px; right:4px; font-size:8px; color:var(--gold); border:1px solid #ffd54f55; border-radius:4px; padding:0 3px; }
 .order {
   font-family:inherit; font-size:9px; padding:6px 2px; border-radius:8px; cursor:pointer;
   color:var(--text); background:#0e1730; border:1px solid var(--line); text-align:center;
@@ -231,6 +239,46 @@ const SCENARIOS = {
 let G = null;
 const P = { playing:false, queue:[], done:null, feed:[], view:null, fx:null, stepTimer:null, typeTimer:null, phaseText:null };
 
+/* ---- 効果音（WebAudioの簡易シンセ） ---- */
+let actx = null;
+let muted = false;
+try { muted = localStorage.getItem('proto-muted') === '1'; } catch (e) { /* noop */ }
+function audioCtx() {
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    actx = new AC();
+  }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function beep(freq = 440, ms = 70, type = 'square', vol = 0.04) {
+  if (muted) return;
+  try {
+    const c = audioCtx();
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(c.destination);
+    o.start();
+    setTimeout(() => { try { o.stop(); } catch (e) { /* noop */ } }, ms);
+  } catch (e) { /* noop */ }
+}
+const SFX = {
+  click:[[660, 35]],
+  hit:[[220, 55], [160, 65]],
+  crit:[[440, 45], [660, 50], [880, 70]],
+  heal:[[700, 55], [900, 70]],
+  command:[[520, 55], [780, 70]],
+  phase:[[420, 25]],
+  win:[[523, 90], [659, 90], [784, 120]],
+  lose:[[300, 150], [220, 180]],
+};
+function sfx(name) {
+  (SFX[name] || SFX.click).forEach(([f, ms], i) => setTimeout(() => beep(f, ms), i * 60));
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const pct = (n, max) => Math.max(0, Math.min(100, Math.round((n / max) * 100)));
 
@@ -251,9 +299,13 @@ function createGame(key) {
     for (const s of SKILLS[m.id]) if (s.uses) uses[m.id][s.id] = s.uses;
   }
   return {
-    key, sc, round:1, side:'ally', phase:'setup', actorIdx:0,
+    key, sc, round:1, side:'ally', phase:'setup',
+    order: MEMBERS.map((m) => m.id),
+    queue: MEMBERS.map((m) => m.id),
+    actedCount: 0,
     members, foes, uses, targetId:foes[0].id,
-    taunt:0, orderUsed:false, pendingOrder:null, extra:false, auto:false, over:null,
+    taunt:0, pendingOrder:null, cmdUsed:{ analyze:false, dodge:false, again:false },
+    extraFor:null, auto:false, over:null,
   };
 }
 
@@ -295,32 +347,52 @@ function startScenario(key) {
 
 function beginAllySetup() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'setup'; G.orderUsed = false; G.extra = false;
+  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null;
   const ev = [header('味方 セットアップ')];
   emit(ev, `敵の意図：${intentLine()}`);
-  play(ev, beginAllyMain);
+  play(ev, beginCommander);
+}
+
+function beginCommander() {
+  if (G.over) return endBattle();
+  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null;
+  const ev = [header('味方 指揮官')];
+  emit(ev, '指揮官の行動を選ぶ（1回）');
+  play(ev, () => {
+    if (G.auto) {
+      const t = G.members.filter((m) => m.hp > 0).sort((a, b) => b.atk - a.atk)[0];
+      if (t) { setTimeout(() => applyOrder('cheer', t), 250); return; }
+    }
+    render();
+  });
+}
+
+function skipCommander() {
+  if (!G || G.phase !== 'commander' || P.playing) return;
+  G.pendingOrder = null;
+  beginAllyMain();
 }
 
 function beginAllyMain() {
   if (G.over) return endBattle();
-  G.phase = 'main'; G.actorIdx = 0;
-  for (const m of G.members) m.acted = false;
+  G.phase = 'main';
+  G.queue = G.order.filter((id) => { const m = G.members.find((x) => x.id === id); return m && m.hp > 0; });
+  G.actedCount = 0;
   play([header('味方 メイン')], nextActor);
 }
 
 function nextActor() {
   if (G.over) return endBattle();
-  if (G.actorIdx >= G.members.length) { beginAllyCleanup(); return; }
-  const m = G.members[G.actorIdx];
-  if (m.hp <= 0) { G.actorIdx += 1; nextActor(); return; }
+  if (!G.queue.length) { beginAllyCleanup(); return; }
+  const m = currentMember();
+  if (!m || m.hp <= 0) { G.queue.shift(); nextActor(); return; }
   if (has(m, 'paralysis')) {
     delete m.statuses.paralysis;
     const ev = [];
     emit(ev, `${m.name}は麻痺で動けない`, null, { kind:'bad' });
-    play(ev, () => { G.actorIdx += 1; nextActor(); });
+    play(ev, () => { G.queue.shift(); G.actedCount += 1; nextActor(); });
     return;
   }
-  m.acted = false;
   render();
   if (G.auto) setTimeout(autoStep, 300);
 }
@@ -333,12 +405,12 @@ function act(id, auto = false) {
   G.pendingOrder = null;
   const ev = [];
   resolveAction(m, id, ev);
-  m.acted = true;
   checkEnd();
   play(ev, () => {
     if (G.over) return endBattle();
-    if (G.extra) { G.extra = false; render(); if (G.auto) setTimeout(autoStep, 300); return; }
-    G.actorIdx += 1;
+    if (G.extraFor === m.id) { G.extraFor = null; render(); if (G.auto) setTimeout(autoStep, 300); return; }
+    G.queue.shift();
+    G.actedCount += 1;
     nextActor();
   });
 }
@@ -525,7 +597,16 @@ function damageMember(t, dmg, ev, source) {
 /* ================= 入力 ================= */
 function currentMember() {
   if (!G || G.side !== 'ally' || G.phase !== 'main') return null;
-  return G.members[G.actorIdx] || null;
+  const id = G.queue[0];
+  return G.members.find((m) => m.id === id) || null;
+}
+
+function reorderMember(id) {
+  if (!G || G.phase !== 'main' || P.playing) return;
+  if (!G.queue.includes(id)) return;
+  G.order = [id, ...G.order.filter((x) => x !== id)];
+  G.queue = G.order.filter((x) => G.queue.includes(x));
+  render();
 }
 function allSkills(m) { return [...SKILLS[m.id], ...COMMON]; }
 function aliveFoes() { return G.foes.filter((f) => f.hp > 0); }
@@ -561,49 +642,39 @@ function canUse(m, sid) {
 }
 
 function useOrder(id) {
-  if (!G || G.side !== 'ally' || G.phase !== 'main' || P.playing || G.over) return;
-  const m = currentMember();
-  if (!m) return;
-  const o = ORDERS.find((x) => x.id === id);
-  if (!o || G.orderUsed || m.tension < o.cost) return;
-  G.auto = false;
-  if (id === 'cheer' || id === 'dodge') {
-    G.pendingOrder = G.pendingOrder === id ? null : id;
-    render();
-    return;
-  }
-  applyOrder(id, m);
+  if (!G || G.side !== 'ally' || G.phase !== 'commander' || P.playing || G.over) return;
+  if (id !== 'cheer' && G.cmdUsed[id]) return;
+  if (id === 'analyze') { applyOrder(id, null); return; }
+  G.pendingOrder = G.pendingOrder === id ? null : id;
+  render();
 }
 
 function applyOrder(id, target) {
-  if (!G || G.orderUsed || P.playing) return;
-  const m = currentMember();
-  if (!m) return;
-  const o = ORDERS.find((x) => x.id === id);
-  if (!o || m.tension < o.cost) return;
-  m.tension -= o.cost;
-  G.orderUsed = true;
-  G.pendingOrder = null;
-  G.auto = false;
+  if (!G || G.side !== 'ally' || G.phase !== 'commander' || P.playing) return;
   const ev = [];
   if (id === 'cheer') {
     if (!target || target.hp <= 0) { render(); return; }
     target.tension = Math.min(6, target.tension + 1);
-    emit(ev, `指揮官命令：意気昂揚！ ${target.name}のテンション+1`, null, { kind:'good' });
+    emit(ev, `指揮官：意気昂揚！ ${target.name}のテンション+1`, null, { kind:'good' });
   } else if (id === 'dodge') {
     if (!target || target.hp <= 0) { render(); return; }
+    G.cmdUsed.dodge = true;
     addStatus(target, 'dodge', 1, {});
-    emit(ev, `指揮官命令：絶対回避！ ${target.name}は次の攻撃を避ける`, null, { kind:'good' });
+    emit(ev, `指揮官：絶対回避！ ${target.name}は次の攻撃を避ける`, null, { kind:'good' });
   } else if (id === 'analyze') {
     const t = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || aliveFoes()[0];
     if (!t) { render(); return; }
+    G.cmdUsed.analyze = true;
     t.analyzed = true;
-    emit(ev, `指揮官命令：精密解析！ ${t.name}の弱点を突く（次の攻撃+20%）`, null, { kind:'good' });
+    emit(ev, `指揮官：精密解析！ ${t.name}の弱点を突く（次の攻撃+20%）`, null, { kind:'good' });
   } else if (id === 'again') {
-    G.extra = true;
-    emit(ev, `指揮官命令：命令再起！ ${m.name}はもう一度動ける`, null, { kind:'good' });
+    if (!target || target.hp <= 0) { render(); return; }
+    G.cmdUsed.again = true;
+    G.extraFor = target.id;
+    emit(ev, `指揮官：命令再起！ ${target.name}はもう一度動ける`, null, { kind:'good' });
   }
-  play(ev, () => render());
+  G.pendingOrder = null;
+  play(ev, beginAllyMain);
 }
 
 function autoStart() {
@@ -665,7 +736,9 @@ function floatFor(side, id) {
   return `<div class="dmg-float ${cls}">${f.kind === 'heal' ? '+' : '-'}${f.dmg}</div>`;
 }
 function phaseLabel() {
-  return `${G.side === 'ally' ? '味方' : '敵'} ${G.phase === 'setup' ? 'セットアップ' : G.phase === 'main' ? 'メイン' : 'クリーンアップ'}`;
+  const side = G.side === 'ally' ? '味方' : '敵';
+  const p = G.phase === 'setup' ? 'セットアップ' : G.phase === 'main' ? 'メイン' : G.phase === 'commander' ? '指揮官' : 'クリーンアップ';
+  return `${side} ${p}`;
 }
 function intentText(f) {
   const i = f.intent;
@@ -696,20 +769,21 @@ function actionButtons(m) {
   }).join('');
 }
 
-function orderButtons(m) {
+function orderButtons() {
   return ORDERS.map((o) => {
-    const dis = G.orderUsed || m.tension < o.cost || P.playing;
+    const used = o.id !== 'cheer' && G.cmdUsed[o.id];
     const active = G.pendingOrder === o.id;
-    return `<button class="order ${active ? 'active' : ''}" data-act="order" data-id="${o.id}" ${dis ? 'disabled' : ''}>
-      ${o.name}<span class="u">${o.cost ? `テン${o.cost}` : '無料'}</span>
+    return `<button class="order ${active ? 'active' : ''}" data-act="order" data-id="${o.id}" ${used || P.playing ? 'disabled' : ''}>
+      ${o.name}<span class="u">${used ? '済' : o.id === 'cheer' ? '無料' : '1回'}</span>
     </button>`;
   }).join('');
 }
 
 function battleHtml() {
   const actor = currentMember();
-  const inAllyMain = G.side === 'ally' && G.phase === 'main' && !!actor;
-  const canAct = inAllyMain && !P.playing && actor.hp > 0;
+  const inCommander = G.side === 'ally' && G.phase === 'commander';
+  const inMain = G.side === 'ally' && G.phase === 'main' && !!actor;
+  const canAct = inMain && !P.playing && actor.hp > 0;
   const pending = G.pendingOrder;
 
   const foes = G.foes.map((f) => {
@@ -730,7 +804,11 @@ function battleHtml() {
     const hp = mhp(m);
     const active = canAct && actor.id === m.id;
     const pick = pending && m.hp > 0;
-    return `<div class="pc ${pick ? 'pick' : ''} ${active ? 'active' : ''} ${hp <= 0 ? 'down' : ''} ${P.fx && P.fx.side === 'member' && P.fx.id === m.id && P.fx.kind === 'dmg' ? 'shake' : ''}" ${pick ? `data-act="order-target" data-id="${m.id}"` : ''}>
+    const qi = inMain ? G.queue.indexOf(m.id) : -1;
+    const reorderable = inMain && qi >= 0 && !P.playing;
+    const cardAct = pick ? 'order-target' : reorderable ? 'reorder' : null;
+    return `<div class="pc ${pick ? 'pick' : ''} ${reorderable ? 'reorderable' : ''} ${active ? 'active' : ''} ${hp <= 0 ? 'down' : ''} ${P.fx && P.fx.side === 'member' && P.fx.id === m.id && P.fx.kind === 'dmg' ? 'shake' : ''}" ${cardAct ? `data-act="${cardAct}" data-id="${m.id}"` : ''}>
+      ${qi >= 0 ? `<span class="qbadge">${qi + 1}</span>` : ''}
       <div class="head"><img src="${m.img}" alt=""><div><div class="name">${m.name}</div><div class="role">${m.role}</div></div></div>
       <div class="bar ${hp / m.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(hp, m.maxHp)}%"></i></div>
       <div class="nums"><span>${hp}/${m.maxHp}</span><span>${mblock(m) > 0 ? `🛡${mblock(m)}` : ''}</span></div>
@@ -744,23 +822,41 @@ function battleHtml() {
   const phase = (P.playing && P.phaseText) ? P.phaseText : phaseLabel();
   const sideCls = phase.startsWith('味方') ? 'ally' : 'enemy';
 
+  const queueBar = inMain
+    ? `<div class="orderbar">行動順：${G.queue.map((id) => (G.members.find((x) => x.id === id) || {}).name || id).join(' → ')} <span>味方をタップで前に</span></div>`
+    : '';
+
+  const actorline = inCommander
+    ? (P.playing ? '演出中…' : pending ? `対象の味方をタップ（${(ORDERS.find((o) => o.id === pending) || {}).name}）` : '指揮官の行動を選ぶ')
+    : inMain
+      ? (P.playing ? '演出中…' : `<b>${actor.name}</b> の行動（${G.actedCount + 1}/3）`)
+      : G.over ? '' : `${G.side === 'ally' ? '味方' : '敵'}の処理中…`;
+
+  const commander = inCommander
+    ? `<div class="commander">
+        <div class="cmd-title">指揮官 <span>命令は1回</span></div>
+        <div class="orders">${orderButtons()}</div>
+        <button class="btn ghost skipbtn" data-act="skip-commander" ${P.playing ? 'disabled' : ''}>待機して味方へ</button>
+      </div>`
+    : '';
+
   return `<div class="topbar">
       <span class="phase ${sideCls}">${phase}</span>
       <span>R<b>${G.round}</b></span>
       <span>${esc(G.sc.name)}</span>
       <span class="spacer"></span>
+      <button class="chipbtn" data-act="mute">${muted ? '🔇' : '🔊'}</button>
       <button class="chipbtn" data-act="restart">選択に戻る</button>
     </div>
     <div class="foes">${foes}</div>
     <div class="party">${party}</div>
-    <div class="actorline">${inAllyMain
-      ? (P.playing ? '演出中…' : pending ? `対象の味方をタップ（${ORDERS.find((o) => o.id === pending).name}）` : `<b>${actor.name}</b> の行動（${G.actorIdx + 1}/3）`)
-      : G.over ? '' : `${G.side === 'ally' ? '味方' : '敵'}の処理中…`}</div>
-    <div class="actions">${inAllyMain ? actionButtons(actor) : ''}</div>
-    <div class="orders">${inAllyMain ? orderButtons(actor) : ''}</div>
-    ${inAllyMain ? `<button class="chipbtn" data-act="auto" style="align-self:flex-end" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}
+    ${queueBar}
+    <div class="actorline">${actorline}</div>
+    ${commander}
+    <div class="actions">${inMain ? actionButtons(actor) : ''}</div>
+    ${inMain ? `<button class="chipbtn" data-act="auto" style="align-self:flex-end" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}
     <div class="log ${P.playing ? 'clickable' : ''}" ${P.playing ? 'data-act="skip"' : ''}>${log}</div>
-    <p class="note">3体・セットアップ→メイン→クリーンアップ／ブロックは相手のクリーンアップで0<br>演出中にタップで早送り。敵をタップで対象変更。試作のため凍結・混乱・気絶復帰・総員交代は未実装。</p>
+    <p class="note">指揮官 → 味方の順。味方をタップすると行動順を前に出せます。<br>ブロックは相手のクリーンアップで0。演出中にタップで早送り。凍結・混乱・気絶復帰・総員交代は未実装。</p>
     ${G.over && !P.playing ? overlayHtml() : ''}`;
 }
 
@@ -833,6 +929,10 @@ function nextEvent() {
   if (P.feed.length > 90) P.feed.shift();
   P.view = ev.snap || null;
   P.fx = ev.fx || null;
+  if (ev.fx && ev.fx.kind === 'dmg') sfx(ev.fx.crit ? 'crit' : 'hit');
+  else if (ev.fx && ev.fx.kind === 'heal') sfx('heal');
+  else if (ev.text.startsWith('指揮官')) sfx('command');
+  else if (ev.phase) sfx('phase');
   render();
   const typed = ev.phase ? 0 : typeLine(ev.text);
   P.stepTimer = setTimeout(nextEvent, Math.max(240, typed + 60));
@@ -884,6 +984,7 @@ function endBattle() {
   P.done = null;
   P.view = null;
   P.fx = null;
+  sfx(G.over === 'win' ? 'win' : 'lose');
   render();
 }
 
@@ -893,12 +994,21 @@ app.addEventListener('click', (e) => {
   if (!el) return;
   e.preventDefault();
   const a = el.dataset.act;
+  if (a === 'mute') {
+    muted = !muted;
+    try { localStorage.setItem('proto-muted', muted ? '1' : '0'); } catch (err) { /* noop */ }
+    render();
+    return;
+  }
   if (P.playing) { skipPlay(); return; }
+  sfx('click');
   if (a === 'select') { startScenario(el.dataset.key); return; }
   if (a === 'restart') { G = null; P.feed = []; render(); return; }
   if (a === 'selectbtn') { G = null; render(); return; }
   if (a === 'again') { startScenario(G.key); return; }
   if (!G) return;
+  if (a === 'skip-commander') { skipCommander(); return; }
+  if (a === 'reorder') { reorderMember(el.dataset.id); return; }
   if (a === 'target') {
     const f = G.foes.find((x) => x.id === el.dataset.id);
     if (f && f.hp > 0) { G.targetId = f.id; render(); }
