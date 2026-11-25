@@ -1,5 +1,7 @@
 # 参考ゲームのバトル情報（2026-11-20 調査）
 
+設計への反映: **`plan/battle-system.md`（2026-11-25 確定版）**。
+
 目的: バフ・デバフ・状態異常・回復・解除の設計材料を集める。
 対象: Slay the Spire / Darkest Dungeon / Etrian Odyssey / Hades（＋DQ・FFの命名）。
 数値は各Wikiの記載。作品・バージョンで変わるため、採用時に再確認する。
