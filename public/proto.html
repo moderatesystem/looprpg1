@@ -16,12 +16,12 @@
 }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html, body {
-  margin:0; padding:0; min-height:100%;
+  margin:0; padding:0; height:100%;
   background:radial-gradient(900px 500px at 50% -10%, #1a2547 0%, var(--bg) 60%);
   color:var(--text); font-family:'DotGothic16', system-ui, sans-serif; font-size:14px;
-  overscroll-behavior:none;
+  overscroll-behavior:none; overflow:hidden;
 }
-#app { max-width:520px; margin:0 auto; padding:10px 12px 24px; display:flex; flex-direction:column; gap:8px; }
+#app { max-width:520px; margin:0 auto; padding:10px 12px 24px; display:flex; flex-direction:column; gap:8px; height:100vh; height:100dvh; min-height:0; overflow:hidden; }
 
 /* 選択 */
 .title { font-size:20px; letter-spacing:1px; margin:6px 0 0; }
@@ -122,6 +122,7 @@ html, body {
 .pc .forecast { position:absolute; right:4px; bottom:4px; }
 .forecast { font-size:9px; color:var(--gold); background:#0a1124ee; border:1px solid #ffd54f66; border-radius:5px; padding:1px 4px; }
 .actbtn .c { font-size:8px; color:var(--orange); margin-top:1px; }
+
 .order {
   font-family:inherit; font-size:9px; padding:6px 2px; border-radius:8px; cursor:pointer;
   color:var(--text); background:#0e1730; border:1px solid var(--line); text-align:center;
@@ -131,13 +132,28 @@ html, body {
 .order .u { display:block; font-size:8px; color:var(--dim); }
 
 /* ログ */
-.log { height:96px; overflow-y:auto; font-size:12px; line-height:1.5; padding:6px 8px; background:#0a1124; border:1px solid var(--line); border-radius:9px; }
+.logwrap { display:flex; flex-direction:column; gap:4px; flex:1 1 auto; min-height:120px; }
+.loghead { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:var(--dim); }
+.loghead .chipbtn { font-size:9px; padding:2px 7px; }
+.log { flex:1 1 auto; min-height:0; overflow-y:auto; font-size:12px; line-height:1.5; padding:6px 8px; background:#0a1124; border:1px solid var(--line); border-radius:9px; }
 .log div { opacity:.55; }
 .log div:last-child { opacity:1; color:#fff; }
 .log .phase { color:var(--gold); opacity:.95; margin-top:5px; border-top:1px dashed #2e3c66; padding-top:3px; }
 .log .bad { color:#ffb3c0; }
 .log .good { color:var(--ok); }
 .log .block { color:var(--cyan); }
+
+/* 下部コマンドドック */
+.dock { display:flex; flex-direction:column; gap:6px; min-height:132px; }
+.actorline { display:flex; align-items:center; gap:8px; }
+.actorline .spacer { flex:1; }
+.targetbar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; background:#122647; border:1px solid #3a6fd8; border-radius:10px; font-size:12px; }
+.targetbar .btn { width:auto; min-width:88px; padding:10px 14px; font-size:13px; margin:0; }
+.logfull { position:fixed; inset:0; z-index:40; background:#000d; display:flex; align-items:center; justify-content:center; padding:16px; }
+.logfull .sheet { width:100%; max-width:480px; height:80vh; max-height:86vh; display:flex; flex-direction:column; gap:8px; text-align:left; }
+.logfull .log { flex:1 1 auto; min-height:0; }
+.logfull .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.logfull h3 { margin:0; font-size:14px; color:var(--gold); }
 
 /* 演出 */
 .dmg-float {
@@ -172,6 +188,24 @@ html, body {
 .btn { font-family:inherit; font-size:14px; padding:11px 8px; border-radius:10px; border:1px solid var(--line); background:#222f57; color:var(--text); cursor:pointer; width:100%; margin-bottom:6px; }
 .btn.primary { background:linear-gradient(180deg,#3a6fd8,#2b57b0); border-color:#5b8cf0; font-weight:bold; }
 .btn.ghost { background:transparent; color:var(--dim); }
+
+/* 小さい端末（360x640 など）: 固定部を詰めてログを確保 */
+@media (max-height: 700px) {
+  #app { gap:6px; padding-bottom:14px; }
+  .foe { padding:4px; }
+  .foe img { height:46px; }
+  .foe .intent { font-size:10px; padding:0 2px; margin-top:1px; }
+  .foe .chips { min-height:10px; }
+  .chips .st { font-size:8px; padding:0 2px; }
+  .pc { padding:4px; }
+  .pc img { width:28px; height:28px; }
+  .pc .pips i { width:5px; height:5px; }
+  .actbtn { padding:4px 3px; }
+  .actbtn .d { font-size:8px; }
+  .order { padding:4px 2px; }
+  .dock { min-height:112px; }
+  .orderbar { display:none; }
+}
 </style>
 </head>
 <body>
@@ -313,7 +347,7 @@ function createGame(key) {
     actedCount: 0,
     members, foes, uses, targetId:foes[0].id,
     taunt:0, pendingOrder:null, pendingAction:null, cmdUsed:{ analyze:false, dodge:false, again:false },
-    extraFor:null, extraActive:null, auto:false, over:null,
+    extraFor:null, extraActive:null, auto:false, over:null, logOpen:false,
   };
 }
 
@@ -958,9 +992,6 @@ function battleHtml() {
         : G.extraActive === actor.id ? `<b>${actor.name}</b> の追加行動`
         : `<b>${actor.name}</b> の行動（${G.actedCount + 1}/3）`)
       : G.over ? '' : `${G.side === 'ally' ? '味方' : '敵'}の処理中…`;
-  const back = (pendingAct || pending)
-    ? `<button class="chipbtn" data-act="cancel-target" style="align-self:flex-end">戻る</button>`
-    : '';
 
   const commander = inCommander
     ? `<div class="commander">
@@ -982,14 +1013,26 @@ function battleHtml() {
     <div class="foes">${foes}</div>
     <div class="party">${party}</div>
     ${queueBar}
-    <div class="actorline">${actorline}</div>
-    ${back}
-    ${commander}
-    <div class="actions">${inMain ? actionButtons(actor) : ''}</div>
-    ${inMain ? `<button class="chipbtn" data-act="auto" style="align-self:flex-end" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}
-    <div class="log ${P.playing ? 'clickable' : ''}" ${P.playing ? 'data-act="skip"' : ''}>${log}</div>
-    <p class="note">指揮官 → 味方の順。味方をタップすると行動順を前に出せます。<br>ブロックは相手のクリーンアップで0。演出中にタップで早送り。凍結・混乱・気絶復帰・総員交代は未実装。</p>
+    <div class="actorline">${actorline}<span class="spacer"></span>${inMain && !pendingAct ? `<button class="chipbtn" data-act="auto" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}</div>
+    <div class="logwrap">
+      <div class="loghead"><span>ログ</span><button class="chipbtn" data-act="log-expand">拡大</button></div>
+      <div class="log ${P.playing ? 'clickable' : ''}" ${P.playing ? 'data-act="skip"' : ''}>${log}</div>
+    </div>
+    <div class="dock">
+      ${commander}
+      ${(pendingAct || pending) ? `<div class="targetbar"><span>対象を選ぶ（${pendingAct ? ((pendingSkill || {}).name || '') : (pending === 'analyze' ? '精密解析' : (ORDERS.find((o) => o.id === pending) || {}).name)}）</span><button class="btn ghost" data-act="cancel-target">戻る</button></div>` : ''}
+      <div class="actions">${inMain && !pendingAct ? actionButtons(actor) : ''}</div>
+    </div>
+    ${G.logOpen ? logFullHtml() : ''}
     ${G.over && !P.playing ? overlayHtml() : ''}`;
+}
+
+function logFullHtml() {
+  const rows = P.feed.map((f) => `<div class="${f.phase ? 'phase' : ''} ${f.kind || ''}">${esc(f.text)}</div>`).join('');
+  return `<div class="logfull"><div class="sheet">
+    <div class="row"><h3>ログ</h3><button class="chipbtn" data-act="log-close">閉じる</button></div>
+    <div class="log">${rows}</div>
+  </div></div>`;
 }
 
 function overlayHtml() {
@@ -1017,15 +1060,14 @@ function selectHtml() {
         <p>3体の敵。毒・封印・麻痺と大技。テンションを貯めて必殺を撃つ。<br>HPは同じだが、テンション2から開始。</p>
       </button>
     </div>
-    <p class="note">ブロックは相手の次のクリーンアップで0。敵の意図は敵クリーンアップで決まり、味方セットアップで公開。<br>旧ボス試作は <a href="/proto-boss.html" style="color:#8fd3ff">/proto-boss.html</a>。</p>`;
+    <p class="note">指揮官 → 味方の順。味方をタップすると行動順を前に出せます。<br>ブロックは相手のクリーンアップで0。敵の意図は敵クリーンアップで決まり、味方セットアップで公開。<br>ログは「拡大」で全履歴。旧ボス試作は <a href="/proto-boss.html" style="color:#8fd3ff">/proto-boss.html</a>。</p>`;
 }
 
 function render() {
   if (P.typeTimer) { clearInterval(P.typeTimer); P.typeTimer = null; }
   if (!G) { app.innerHTML = selectHtml(); return; }
   app.innerHTML = battleHtml();
-  const box = app.querySelector('.log');
-  if (box) box.scrollTop = box.scrollHeight;
+  app.querySelectorAll('.log').forEach((box) => { box.scrollTop = box.scrollHeight; });
 }
 
 /* ================= 再生 ================= */
@@ -1072,15 +1114,18 @@ function nextEvent() {
 }
 function typeLine(text) {
   if (P.typeTimer) { clearInterval(P.typeTimer); P.typeTimer = null; }
-  const el = app.querySelector('.log div:last-child');
+  const logs = app.querySelectorAll('.log');
+  const box = logs[logs.length - 1];
+  const el = box && box.querySelector('div:last-child');
   if (!el) return 0;
   el.textContent = '';
   let i = 0;
   P.typeTimer = setInterval(() => {
     i += 1;
     el.textContent = text.slice(0, i);
-    const box = app.querySelector('.log');
-    if (box) box.scrollTop = box.scrollHeight;
+    const all = app.querySelectorAll('.log');
+    const last = all[all.length - 1];
+    if (last) last.scrollTop = last.scrollHeight;
     if (i >= text.length) { clearInterval(P.typeTimer); P.typeTimer = null; }
   }, 13);
   return text.length * 13;
@@ -1135,6 +1180,8 @@ app.addEventListener('click', (e) => {
   }
   if (a === 'restart') { G = null; P.feed = []; render(); return; }
   if (a === 'stop-auto') { if (G) G.auto = false; render(); return; }
+  if (a === 'log-expand') { if (G) { G.logOpen = true; render(); } return; }
+  if (a === 'log-close') { if (G) { G.logOpen = false; render(); } return; }
   if (P.playing) { skipPlay(); return; }
   sfx('click');
   if (a === 'select') { startScenario(el.dataset.key); return; }
