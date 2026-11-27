@@ -189,6 +189,17 @@ html, body {
 .btn.primary { background:linear-gradient(180deg,#3a6fd8,#2b57b0); border-color:#5b8cf0; font-weight:bold; }
 .btn.ghost { background:transparent; color:var(--dim); }
 
+/* 選択肢の詳細ポップアップ */
+.detail { position:fixed; inset:0; z-index:35; background:#000a; display:flex; align-items:flex-end; justify-content:center; padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); }
+.detail .sheet { width:100%; max-width:480px; text-align:left; padding:14px; border-radius:14px; }
+.detail .dhead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.detail h3 { margin:0; font-size:16px; }
+.detail .desc { font-size:12px; line-height:1.7; margin:8px 0; color:var(--text); }
+.detail .meta { display:flex; flex-wrap:wrap; gap:6px; font-size:10px; color:var(--dim); }
+.detail .meta span { border:1px solid var(--line); background:#0e1730; border-radius:999px; padding:2px 7px; }
+.detail .btns { display:flex; gap:8px; margin-top:12px; }
+.detail .btns .btn { margin:0; flex:1; }
+
 /* 小さい端末（360x640 など）: 固定部を詰めてログを確保 */
 @media (max-height: 700px) {
   #app { gap:6px; padding-bottom:14px; }
@@ -222,31 +233,31 @@ const MEMBERS = [
 
 const SKILLS = {
   gald: [
-    { id:'bash', name:'盾撃', icon:'🛡', desc:'攻撃＋ブロック4（2回）', base:6, block:4, uses:2 },
-    { id:'taunt', name:'挑発', icon:'📣', desc:'狙いを自分に＋ブロック6', block:6, taunt:true, uses:2 },
+    { id:'bash', name:'盾撃', icon:'🛡', desc:'攻撃＋ブロック4。1戦2回。', base:6, block:4, uses:2 },
+    { id:'taunt', name:'挑発', icon:'📣', desc:'敵の狙いを自分に集め、ブロック6。1戦2回。', block:6, taunt:true, uses:2 },
   ],
   yu: [
-    { id:'double', name:'連撃', icon:'🗡', desc:'5×2ダメージ', base:5, hits:2, uses:2 },
-    { id:'finisher', name:'必殺', icon:'🔥', desc:'テンション3：9×2', base:9, hits:2, tension:3, uses:1 },
+    { id:'double', name:'連撃', icon:'🗡', desc:'5×2ダメージ。1戦2回。', base:5, hits:2, uses:2 },
+    { id:'finisher', name:'必殺', icon:'🔥', desc:'テンション3を消費し、9×2ダメージ。1戦1回。', base:9, hits:2, tension:3, uses:1 },
   ],
   sera: [
-    { id:'heal', name:'いやし', icon:'✚', desc:'最も減った味方を14回復', heal:14, uses:2 },
-    { id:'bless', name:'祝福', icon:'✨', desc:'ユウの与ダメ+25%（3T）', buff:'atkUp', uses:1 },
-    { id:'cleanse', name:'清め', icon:'🧼', desc:'状態異常を解除＋再生', cleanse:true, uses:1 },
+    { id:'heal', name:'いやし', icon:'✚', desc:'味方1人を14回復。1戦2回。', heal:14, uses:2 },
+    { id:'bless', name:'祝福', icon:'✨', desc:'味方1人の与ダメージ+25%（3ターン）。1戦1回。', buff:'atkUp', uses:1 },
+    { id:'cleanse', name:'清め', icon:'🧼', desc:'味方1人の状態異常を解除し、再生6×3を付与。1戦1回。', cleanse:true, uses:1 },
   ],
 };
 
 const COMMON = [
-  { id:'attack', name:'攻撃', icon:'⚔', desc:'通常攻撃', base:4 },
-  { id:'guard', name:'防御', icon:'🛡', desc:'ブロック8', block:8 },
-  { id:'charge', name:'ためる', icon:'⏫', desc:'テンション+2／ブロック4', charge:true, block:4 },
+  { id:'attack', name:'攻撃', icon:'⚔', desc:'通常攻撃。', base:4 },
+  { id:'guard', name:'防御', icon:'🛡', desc:'ブロック8。', block:8 },
+  { id:'charge', name:'ためる', icon:'⏫', desc:'テンション+2、ブロック4。', charge:true, block:4 },
 ];
 
 const ORDERS = [
-  { id:'cheer', name:'意気昂揚' },
-  { id:'analyze', name:'精密解析' },
-  { id:'dodge', name:'絶対回避' },
-  { id:'again', name:'命令再起' },
+  { id:'cheer', name:'意気昂揚', desc:'味方1人のテンションを+1する。毎ターン使える（無料）。', target:'味方1人' },
+  { id:'analyze', name:'精密解析', desc:'敵1体を解析し、次の攻撃を+20%する。1戦1回。', target:'敵1体' },
+  { id:'dodge', name:'絶対回避', desc:'味方1人が次に受ける攻撃を1回無効にする。1戦1回。', target:'味方1人' },
+  { id:'again', name:'命令再起', desc:'味方1人がこのターンもう一度行動できる。1戦1回。', target:'味方1人' },
 ];
 
 const SCENARIOS = {
@@ -346,7 +357,7 @@ function createGame(key) {
     queue: MEMBERS.map((m) => m.id),
     actedCount: 0,
     members, foes, uses, targetId:foes[0].id,
-    taunt:0, pendingOrder:null, pendingAction:null, cmdUsed:{ analyze:false, dodge:false, again:false },
+    taunt:0, pendingOrder:null, pendingAction:null, pendingDetail:null, cmdUsed:{ analyze:false, dodge:false, again:false },
     extraFor:null, extraActive:null, auto:false, over:null, logOpen:false,
   };
 }
@@ -389,7 +400,7 @@ function startScenario(key) {
 
 function beginAllySetup() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null; G.pendingAction = null;
+  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null; G.pendingAction = null; G.pendingDetail = null;
   const ev = [header('味方 セットアップ')];
   emit(ev, `敵の意図：${intentLine()}`);
   play(ev, beginCommander);
@@ -397,7 +408,7 @@ function beginAllySetup() {
 
 function beginCommander() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null; G.pendingAction = null;
+  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null; G.pendingAction = null; G.pendingDetail = null;
   const ev = [header('味方 指揮官')];
   emit(ev, '命令を選ぶ（1回）');
   play(ev, () => {
@@ -412,12 +423,13 @@ function beginCommander() {
 function skipCommander() {
   if (!G || G.phase !== 'commander' || P.playing) return;
   G.pendingOrder = null;
+  G.pendingDetail = null;
   beginAllyMain();
 }
 
 function beginAllyMain() {
   if (G.over) return endBattle();
-  G.phase = 'main'; G.pendingAction = null; G.pendingOrder = null;
+  G.phase = 'main'; G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null;
   G.queue = G.order.filter((id) => { const m = G.members.find((x) => x.id === id); return m && m.hp > 0; });
   G.actedCount = 0;
   G.extraActive = null;
@@ -444,13 +456,15 @@ function nextActor() {
   if (G.auto) setTimeout(autoStep, 300);
 }
 
-function act(id, auto = false) {
+function act(id, auto = false, skipDetail = false) {
   if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
   const m = currentMember();
   if (!m || m.hp <= 0) return;
   const skill = allSkills(m).find((s) => s.id === id);
   if (!skill) return;
   if (!auto) G.auto = false;
+  if (!auto && !skipDetail) { G.pendingDetail = { kind:'skill', id }; G.pendingOrder = null; render(); return; }
+  G.pendingDetail = null;
   G.pendingOrder = null;
   const tgt = skillTarget(skill);
   if (!auto && tgt !== 'self') {
@@ -466,6 +480,7 @@ function resolveNow(id, target) {
   const m = currentMember();
   if (!m || m.hp <= 0) return;
   if (G.pendingAction) G.pendingAction = null;
+  G.pendingDetail = null;
   if (target && G.foes.includes(target)) G.targetId = target.id;
   const ev = [];
   resolveAction(m, id, ev, target);
@@ -483,7 +498,7 @@ function resolveNow(id, target) {
 function beginAllyCleanup() {
   if (G.over) return endBattle();
   G.side = 'ally'; G.phase = 'cleanup';
-  G.extraFor = null; G.extraActive = null; G.pendingAction = null; G.pendingOrder = null;
+  G.extraFor = null; G.extraActive = null; G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null;
   const ev = [header('味方 クリーンアップ')];
   for (const m of G.members) if (m.hp > 0) tickStatuses(m, ev, false);
   for (const f of G.foes) {
@@ -768,11 +783,26 @@ function canUse(m, sid) {
   return true;
 }
 
-function useOrder(id) {
+function useOrder(id, skipDetail = false) {
   if (!G || G.side !== 'ally' || G.phase !== 'commander' || P.playing || G.over) return;
   if (id !== 'cheer' && G.cmdUsed[id]) return;
+  if (!skipDetail) { G.auto = false; G.pendingDetail = { kind:'order', id }; G.pendingOrder = null; render(); return; }
+  G.pendingDetail = null;
   G.pendingOrder = G.pendingOrder === id ? null : id;
   G.pendingAction = null;
+  render();
+}
+
+function confirmDetail() {
+  if (!G || !G.pendingDetail || P.playing) return;
+  const d = G.pendingDetail;
+  G.pendingDetail = null;
+  if (d.kind === 'skill') act(d.id, false, true);
+  else useOrder(d.id, true);
+}
+function closeDetail() {
+  if (!G) return;
+  G.pendingDetail = null;
   render();
 }
 
@@ -801,6 +831,7 @@ function applyOrder(id, target) {
     emit(ev, `指揮官：命令再起！ ${target.name}はもう一度動ける`, null, { kind:'good' });
   }
   G.pendingOrder = null;
+  G.pendingDetail = null;
   play(ev, beginAllyMain);
 }
 
@@ -923,6 +954,45 @@ function orderBadge(id) {
   return '';
 }
 
+function detailHtml() {
+  if (!G || !G.pendingDetail || P.playing) return '';
+  const d = G.pendingDetail;
+  let icon = '';
+  let name = '';
+  let desc = '';
+  let meta = [];
+  let confirm = '使う';
+  if (d.kind === 'order') {
+    const o = ORDERS.find((x) => x.id === d.id);
+    if (!o) return '';
+    icon = '📜';
+    name = o.name;
+    desc = o.desc;
+    meta = [`対象: ${o.target}`, d.id === 'cheer' ? '毎ターン' : '1戦1回', 'テンション消費なし'];
+    confirm = '命令する';
+  } else {
+    const m = currentMember();
+    const s = m && allSkills(m).find((x) => x.id === d.id);
+    if (!s) return '';
+    icon = s.icon;
+    name = s.name;
+    desc = s.desc;
+    const tgt = skillTarget(s);
+    meta = [
+      `対象: ${tgt === 'foe' ? '敵1体' : tgt === 'ally' ? '味方1人' : '自分'}`,
+      s.uses ? `残り${G.uses[m.id][s.id] || 0}回` : '使用回数なし',
+    ];
+    if (s.tension) meta.push(`テンション${s.tension}消費`);
+    if (s.base) { meta.push(expectedText(m, s)); meta.push(critText(m, s)); }
+  }
+  return `<div class="detail" data-act="detail-close"><div class="sheet" data-act="stay">
+    <div class="dhead"><h3>${icon} ${esc(name)}</h3><button class="chipbtn" data-act="detail-close">✕</button></div>
+    <div class="desc">${esc(desc)}</div>
+    <div class="meta">${meta.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+    <div class="btns"><button class="btn primary" data-act="detail-confirm">${confirm}</button><button class="btn ghost" data-act="detail-close">戻る</button></div>
+  </div></div>`;
+}
+
 function battleHtml() {
   const actor = currentMember();
   const inCommander = G.side === 'ally' && G.phase === 'commander';
@@ -1018,6 +1088,7 @@ function battleHtml() {
       ${(pendingAct || pending) ? `<div class="targetbar"><span>対象を選ぶ（${pendingAct ? ((pendingSkill || {}).name || '') : (pending === 'analyze' ? '精密解析' : (ORDERS.find((o) => o.id === pending) || {}).name)}）</span><button class="btn ghost" data-act="cancel-target">戻る</button></div>` : ''}
       <div class="actions">${inMain && !pendingAct ? actionButtons(actor) : ''}</div>
     </div>
+    ${detailHtml()}
     ${G.logOpen ? logFullHtml() : ''}
     ${G.over && !P.playing ? overlayHtml() : ''}`;
 }
@@ -1177,6 +1248,9 @@ app.addEventListener('click', (e) => {
   if (a === 'stop-auto') { if (G) G.auto = false; render(); return; }
   if (a === 'log-expand') { if (G) { G.logOpen = true; render(); } return; }
   if (a === 'log-close') { if (G) { G.logOpen = false; render(); } return; }
+  if (a === 'stay') return;
+  if (a === 'detail-confirm') { confirmDetail(); return; }
+  if (a === 'detail-close') { closeDetail(); return; }
   if (P.playing) { skipPlay(); return; }
   sfx('click');
   if (a === 'select') { startScenario(el.dataset.key); return; }
@@ -1201,7 +1275,7 @@ app.addEventListener('click', (e) => {
     else if (G.pendingOrder) applyOrder(G.pendingOrder, t);
     return;
   }
-  if (a === 'cancel-target') { G.pendingAction = null; G.pendingOrder = null; render(); return; }
+  if (a === 'cancel-target') { G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null; render(); return; }
   if (a === 'auto') { autoStart(); return; }
 });
 
