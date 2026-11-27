@@ -50,9 +50,10 @@ html, body {
 .foes { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
 .foe {
   position:relative; border:1px solid var(--line); border-radius:10px; background:#0c1428f2;
-  padding:5px; cursor:pointer; transition:border-color .12s;
+  padding:5px; cursor:default; transition:border-color .12s;
 }
 .foe.target { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+.foe.pick { border-color:var(--cyan); box-shadow:0 0 0 1px var(--cyan) inset; cursor:pointer; }
 .foe.dead { opacity:.32; filter:grayscale(1); cursor:default; }
 .foe img { width:100%; height:62px; object-fit:contain; image-rendering:pixelated; display:block; }
 .foe .name { font-size:11px; margin-top:1px; }
@@ -117,6 +118,10 @@ html, body {
 .orderbar span { font-size:9px; color:#6f80a8; }
 .pc.reorderable { cursor:pointer; border-color:#3a6fd8; }
 .pc .qbadge { position:absolute; top:3px; right:4px; font-size:8px; color:var(--gold); border:1px solid #ffd54f55; border-radius:4px; padding:0 3px; }
+.foe .forecast { position:absolute; top:3px; left:3px; }
+.pc .forecast { position:absolute; right:4px; bottom:4px; }
+.forecast { font-size:9px; color:var(--gold); background:#0a1124ee; border:1px solid #ffd54f66; border-radius:5px; padding:1px 4px; }
+.actbtn .c { font-size:8px; color:var(--orange); margin-top:1px; }
 .order {
   font-family:inherit; font-size:9px; padding:6px 2px; border-radius:8px; cursor:pointer;
   color:var(--text); background:#0e1730; border:1px solid var(--line); text-align:center;
@@ -307,7 +312,7 @@ function createGame(key) {
     queue: MEMBERS.map((m) => m.id),
     actedCount: 0,
     members, foes, uses, targetId:foes[0].id,
-    taunt:0, pendingOrder:null, cmdUsed:{ analyze:false, dodge:false, again:false },
+    taunt:0, pendingOrder:null, pendingAction:null, cmdUsed:{ analyze:false, dodge:false, again:false },
     extraFor:null, extraActive:null, auto:false, over:null,
   };
 }
@@ -350,7 +355,7 @@ function startScenario(key) {
 
 function beginAllySetup() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null;
+  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null; G.pendingAction = null;
   const ev = [header('味方 セットアップ')];
   emit(ev, `敵の意図：${intentLine()}`);
   play(ev, beginCommander);
@@ -358,7 +363,7 @@ function beginAllySetup() {
 
 function beginCommander() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null;
+  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null; G.pendingAction = null;
   const ev = [header('味方 指揮官')];
   emit(ev, '命令を選ぶ（1回）');
   play(ev, () => {
@@ -378,7 +383,7 @@ function skipCommander() {
 
 function beginAllyMain() {
   if (G.over) return endBattle();
-  G.phase = 'main';
+  G.phase = 'main'; G.pendingAction = null; G.pendingOrder = null;
   G.queue = G.order.filter((id) => { const m = G.members.find((x) => x.id === id); return m && m.hp > 0; });
   G.actedCount = 0;
   G.extraActive = null;
@@ -409,10 +414,27 @@ function act(id, auto = false) {
   if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
   const m = currentMember();
   if (!m || m.hp <= 0) return;
+  const skill = allSkills(m).find((s) => s.id === id);
+  if (!skill) return;
   if (!auto) G.auto = false;
   G.pendingOrder = null;
+  const tgt = skillTarget(skill);
+  if (!auto && tgt !== 'self') {
+    G.pendingAction = id;
+    render();
+    return;
+  }
+  resolveNow(id, auto ? autoTarget(m, skill) : null);
+}
+
+function resolveNow(id, target) {
+  if (!G || G.over || P.playing) return;
+  const m = currentMember();
+  if (!m || m.hp <= 0) return;
+  if (G.pendingAction) G.pendingAction = null;
+  if (target && G.foes.includes(target)) G.targetId = target.id;
   const ev = [];
-  resolveAction(m, id, ev);
+  resolveAction(m, id, ev, target);
   checkEnd();
   play(ev, () => {
     if (G.over) return endBattle();
@@ -427,7 +449,7 @@ function act(id, auto = false) {
 function beginAllyCleanup() {
   if (G.over) return endBattle();
   G.side = 'ally'; G.phase = 'cleanup';
-  G.extraFor = null; G.extraActive = null;
+  G.extraFor = null; G.extraActive = null; G.pendingAction = null; G.pendingOrder = null;
   const ev = [header('味方 クリーンアップ')];
   for (const m of G.members) if (m.hp > 0) tickStatuses(m, ev, false);
   for (const f of G.foes) {
@@ -478,7 +500,67 @@ function beginEnemyCleanup() {
 }
 
 /* ================= 行動解決 ================= */
-function resolveAction(m, id, ev) {
+function skillTarget(skill) {
+  if (!skill) return 'self';
+  if (skill.base) return 'foe';
+  if (skill.heal || skill.buff || skill.cleanse) return 'ally';
+  return 'self';
+}
+function attackRaw(m, skill, foe, crit) {
+  let raw = skill.base + m.atk * 0.5;
+  if (has(m, 'atkUp')) raw *= 1.25;
+  if (foe && foe.analyzed) raw *= 1.2;
+  if (crit) raw *= 1.8;
+  return Math.max(1, Math.floor(raw - (foe ? foe.def : 0)));
+}
+function rawPerHit(m, skill) {
+  let raw = skill.base + m.atk * 0.5;
+  if (has(m, 'atkUp')) raw *= 1.25;
+  return Math.max(1, Math.floor(raw));
+}
+function forecastTotal(m, skill, foe) {
+  const hits = skill.hits || 1;
+  const per = attackRaw(m, skill, foe, false);
+  let block = foe.block;
+  let total = 0;
+  for (let i = 0; i < hits; i += 1) {
+    let d = per;
+    if (block > 0) { const a = Math.min(block, d); block -= a; d -= a; }
+    total += d;
+  }
+  return total;
+}
+function critText(m, skill) {
+  if (!skill.base) return '';
+  let raw = skill.base + m.atk * 0.5;
+  if (has(m, 'atkUp')) raw *= 1.25;
+  raw *= 1.8;
+  return `会心 ${Math.max(1, Math.floor(raw))}`;
+}
+function expectedText(m, skill) {
+  if (skill.base) {
+    const per = rawPerHit(m, skill);
+    const hits = skill.hits || 1;
+    return `期待 ${per}${hits > 1 ? `×${hits}（計${per * hits}）` : ''}${skill.block ? `＋ブロック${skill.block}` : ''}`;
+  }
+  if (skill.heal) return `期待 最大${skill.heal}回復`;
+  if (skill.buff) return '攻撃+25% 3T';
+  if (skill.cleanse) return '状態解除＋再生6×3';
+  if (skill.charge) return `テン+2／ブロック${skill.block || 0}`;
+  if (skill.taunt) return `挑発＋ブロック${skill.block || 0}`;
+  if (skill.block) return `ブロック${skill.block}`;
+  return '';
+}
+function autoTarget(m, skill) {
+  const tgt = skillTarget(skill);
+  if (tgt === 'foe') return aliveFoes().sort((a, b) => a.hp - b.hp)[0] || null;
+  if (skill.heal) return lowestAlly();
+  if (skill.buff) return G.members.filter((x) => x.hp > 0).sort((a, b) => b.atk - a.atk)[0] || null;
+  if (skill.cleanse) return mostAfflicted();
+  return null;
+}
+
+function resolveAction(m, id, ev, target) {
   const skill = allSkills(m).find((s) => s.id === id);
   if (!skill) return;
   const sealed = m.statuses.seal && m.statuses.seal.turns > 0 ? m.statuses.seal.skillId : null;
@@ -495,24 +577,24 @@ function resolveAction(m, id, ev) {
     m.block += skill.block || 0;
     emit(ev, `${m.name}は挑発した（敵の狙いを自分に）`, null, { kind:'good' });
   } else if (skill.heal) {
-    const t = lowestAlly();
+    const t = (target && target.hp > 0) ? target : lowestAlly();
     const amt = Math.min(skill.heal, t.maxHp - t.hp);
     if (amt <= 0) { emit(ev, `${t.name}のHPは満タンだ`, null, { kind:'bad' }); return; }
     t.hp += amt;
     emit(ev, `${m.name}のいやし！ ${t.name}のHPが ${amt} 回復`, { side:'member', id:t.id, dmg:amt, kind:'heal' }, { kind:'good' });
   } else if (skill.buff) {
-    const t = G.members.filter((x) => x.hp > 0).sort((a, b) => b.atk - a.atk)[0];
+    const t = (target && target.hp > 0) ? target : G.members.filter((x) => x.hp > 0).sort((a, b) => b.atk - a.atk)[0];
     if (!t) return;
     addStatus(t, 'atkUp', 3, { mult:1.25 });
     emit(ev, `${m.name}の祝福！ ${t.name}の与ダメ+25%（3T）`, null, { kind:'good' });
   } else if (skill.cleanse) {
-    const t = mostAfflicted();
+    const t = (target && target.hp > 0) ? target : mostAfflicted();
     cleanDebuffs(t);
     addStatus(t, 'regen', 3, { value:6 });
     emit(ev, `${m.name}の清め！ ${t.name}の状態を解除し、再生を付与`, null, { kind:'good' });
   } else if (skill.base) {
     if (skill.block) m.block += skill.block;
-    memberAttack(m, skill, ev);
+    memberAttack(m, skill, ev, target);
   } else if (skill.block) {
     m.block += skill.block;
     emit(ev, `${m.name}は身を守っている（ブロック+${skill.block}）`, null, { kind:'block' });
@@ -522,29 +604,30 @@ function resolveAction(m, id, ev) {
   if (skill.uses) G.uses[m.id][id] -= 1;
 }
 
-function memberAttack(m, skill, ev) {
+function memberAttack(m, skill, ev, target) {
   const hits = skill.hits || 1;
+  let foe = target || null;
   for (let i = 0; i < hits; i += 1) {
-    let target = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || G.foes.find((f) => f.hp > 0);
-    if (!target) return;
-    let raw = skill.base + m.atk * 0.5;
-    if (has(m, 'atkUp')) raw *= 1.25;
-    if (target.analyzed) { raw *= 1.2; target.analyzed = false; }
-    const crit = Math.random() < 0.15;
-    if (crit) raw *= 1.8;
-    raw = Math.max(1, Math.floor(raw - target.def));
-    if (target.block > 0) {
-      const a = Math.min(target.block, raw);
-      target.block -= a; raw -= a;
-      emit(ev, `${target.name}のブロックが ${a} 軽減`, null, { kind:'block' });
+    if (!foe || foe.hp <= 0) {
+      foe = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || G.foes.find((f) => f.hp > 0);
     }
-    if (raw <= 0) { emit(ev, `${target.name}は攻撃を防いだ`, null, { kind:'block' }); continue; }
-    target.hp = Math.max(0, target.hp - raw);
-    emit(ev, `${m.name}の${skill.name}！ ${target.name}に ${raw} ダメージ${crit ? '（会心）' : ''}`,
-      { side:'foe', id:target.id, dmg:raw, kind:'dmg', crit });
-    if (target.hp <= 0) {
-      emit(ev, `${target.name}を倒した！`, null, { kind:'good' });
-      if (G.targetId === target.id) G.targetId = (G.foes.find((f) => f.hp > 0) || {}).id;
+    if (!foe) return;
+    const crit = Math.random() < 0.15;
+    const analyzed = foe.analyzed;
+    let raw = attackRaw(m, skill, foe, crit);
+    if (analyzed) foe.analyzed = false;
+    if (foe.block > 0) {
+      const a = Math.min(foe.block, raw);
+      foe.block -= a; raw -= a;
+      emit(ev, `${foe.name}のブロックが ${a} 軽減`, null, { kind:'block' });
+    }
+    if (raw <= 0) { emit(ev, `${foe.name}は攻撃を防いだ`, null, { kind:'block' }); continue; }
+    foe.hp = Math.max(0, foe.hp - raw);
+    emit(ev, `${m.name}の${skill.name}！ ${foe.name}に ${raw} ダメージ${crit ? '（会心）' : ''}`,
+      { side:'foe', id:foe.id, dmg:raw, kind:'dmg', crit });
+    if (foe.hp <= 0) {
+      emit(ev, `${foe.name}を倒した！`, null, { kind:'good' });
+      if (G.targetId === foe.id) G.targetId = (G.foes.find((f) => f.hp > 0) || {}).id;
     }
   }
 }
@@ -654,8 +737,8 @@ function canUse(m, sid) {
 function useOrder(id) {
   if (!G || G.side !== 'ally' || G.phase !== 'commander' || P.playing || G.over) return;
   if (id !== 'cheer' && G.cmdUsed[id]) return;
-  if (id === 'analyze') { applyOrder(id, null); return; }
   G.pendingOrder = G.pendingOrder === id ? null : id;
+  G.pendingAction = null;
   render();
 }
 
@@ -672,7 +755,7 @@ function applyOrder(id, target) {
     addStatus(target, 'dodge', 1, {});
     emit(ev, `指揮官：絶対回避！ ${target.name}は次の攻撃を避ける`, null, { kind:'good' });
   } else if (id === 'analyze') {
-    const t = G.foes.find((f) => f.id === G.targetId && f.hp > 0) || aliveFoes()[0];
+    const t = (target && target.hp > 0) ? target : (G.foes.find((f) => f.id === G.targetId && f.hp > 0) || aliveFoes()[0]);
     if (!t) { render(); return; }
     G.cmdUsed.analyze = true;
     t.analyzed = true;
@@ -771,10 +854,11 @@ function actionButtons(m) {
   return allSkills(m).map((s) => {
     const left = s.uses ? (G.uses[m.id][s.id] || 0) : null;
     const noHeal = s.heal && !G.members.some((x) => x.hp > 0 && x.hp < x.maxHp);
-    const dis = (left !== null && left <= 0) || sealed === s.id || (s.tension && m.tension < s.tension) || noHeal || P.playing;
+    const dis = (left !== null && left <= 0) || sealed === s.id || (s.tension && m.tension < s.tension) || noHeal || !!G.pendingAction || P.playing;
     return `<button class="actbtn" data-act="skill" data-id="${s.id}" ${dis ? 'disabled' : ''}>
       <div class="n">${s.icon} ${s.name}${sealed === s.id ? ' 🔒' : ''}</div>
-      <div class="d">${s.desc}</div>
+      <div class="d">${expectedText(m, s)}</div>
+      ${s.base ? `<div class="c">${critText(m, s)}</div>` : ''}
       <div class="u">${left === null ? '∞' : `残${left}`}${s.tension ? ` ・テン${s.tension}` : ''}</div>
     </button>`;
   }).join('');
@@ -790,20 +874,45 @@ function orderButtons() {
   }).join('');
 }
 
+function allyEffectBadge(m, skill, ally) {
+  if (!skill) return '';
+  if (skill.heal) return `+${Math.min(skill.heal, ally.maxHp - ally.hp)}`;
+  if (skill.buff) return '攻撃+25%';
+  if (skill.cleanse) return '解除＋再生';
+  return '';
+}
+function orderBadge(id) {
+  if (id === 'analyze') return '解析';
+  if (id === 'cheer') return 'テン+1';
+  if (id === 'dodge') return '回避';
+  if (id === 'again') return '追加行動';
+  return '';
+}
+
 function battleHtml() {
   const actor = currentMember();
   const inCommander = G.side === 'ally' && G.phase === 'commander';
   const inMain = G.side === 'ally' && G.phase === 'main' && !!actor;
   const canAct = inMain && !P.playing && actor.hp > 0;
   const pending = G.pendingOrder;
+  const pendingAct = G.pendingAction;
+  const pendingSkill = pendingAct && actor ? allSkills(actor).find((s) => s.id === pendingAct) : null;
+  const pendingSide = pendingSkill ? skillTarget(pendingSkill) : null;
+  const foePick = pendingSide === 'foe' || pending === 'analyze';
+  const allyPick = pendingSide === 'ally' || !!(pending && pending !== 'analyze');
 
   const foes = G.foes.map((f) => {
     const hp = fhp(f);
-    return `<div class="foe ${G.targetId === f.id ? 'target' : ''} ${hp <= 0 ? 'dead' : ''} ${P.fx && P.fx.side === 'foe' && P.fx.id === f.id && (P.fx.kind === 'dmg' || P.fx.kind === 'poison') ? 'shake' : ''}"
-                 data-act="target" data-id="${f.id}">
+    const pickable = foePick && hp > 0;
+    const badge = pickable && pendingSide === 'foe' && pendingSkill
+      ? `予想 ${forecastTotal(actor, pendingSkill, f)}`
+      : pickable && pending === 'analyze' ? '解析' : '';
+    return `<div class="foe ${pickable ? 'pick' : ''} ${G.targetId === f.id && !pickable ? 'target' : ''} ${hp <= 0 ? 'dead' : ''} ${P.fx && P.fx.side === 'foe' && P.fx.id === f.id && (P.fx.kind === 'dmg' || P.fx.kind === 'poison') ? 'shake' : ''}"
+                 ${pickable ? `data-act="pick-foe" data-id="${f.id}"` : ''}>
       <img src="${f.img}" alt="">
       <div class="name">${esc(f.name)}</div>
       <div class="intent">${hp > 0 ? intentText(f) : '—'}</div>
+      ${badge ? `<div class="forecast">${badge}</div>` : ''}
       <div class="bar"><i style="width:${pct(hp, f.maxHp)}%"></i></div>
       <div class="nums"><span>HP ${hp}</span><span>${fblock(f) > 0 ? `🛡${fblock(f)}` : ''}</span></div>
       <div class="chips">${statusChips(fstatuses(f))}${fanalyzed(f) ? '<span class="st atkUp">弱点</span>' : ''}</div>
@@ -814,12 +923,14 @@ function battleHtml() {
   const party = G.members.map((m) => {
     const hp = mhp(m);
     const active = canAct && actor.id === m.id;
-    const pick = pending && m.hp > 0;
+    const pick = allyPick && m.hp > 0;
     const qi = inMain ? G.queue.indexOf(m.id) : -1;
-    const reorderable = inMain && qi > 0 && !P.playing;
-    const cardAct = pick ? 'order-target' : reorderable ? 'reorder' : null;
+    const reorderable = inMain && qi > 0 && !P.playing && !allyPick;
+    const cardAct = pick ? 'pick-ally' : reorderable ? 'reorder' : null;
+    const badge = pick ? (pendingSkill ? allyEffectBadge(actor, pendingSkill, m) : orderBadge(pending)) : '';
     return `<div class="pc ${pick ? 'pick' : ''} ${reorderable ? 'reorderable' : ''} ${active ? 'active' : ''} ${hp <= 0 ? 'down' : ''} ${P.fx && P.fx.side === 'member' && P.fx.id === m.id && (P.fx.kind === 'dmg' || P.fx.kind === 'poison') ? 'shake' : ''}" ${cardAct ? `data-act="${cardAct}" data-id="${m.id}"` : ''}>
       ${qi >= 0 ? `<span class="qbadge">${qi + 1}</span>` : ''}
+      ${badge ? `<div class="forecast">${badge}</div>` : ''}
       <div class="head"><img src="${m.img}" alt=""><div><div class="name">${m.name}</div><div class="role">${m.role}</div></div></div>
       <div class="bar ${hp / m.maxHp <= 0.3 ? 'low' : ''}"><i style="width:${pct(hp, m.maxHp)}%"></i></div>
       <div class="nums"><span>${hp}/${m.maxHp}</span><span>${mblock(m) > 0 ? `🛡${mblock(m)}` : ''}</span></div>
@@ -838,10 +949,18 @@ function battleHtml() {
     : '';
 
   const actorline = inCommander
-    ? (P.playing ? '演出中…' : pending ? `対象の味方をタップ（${(ORDERS.find((o) => o.id === pending) || {}).name}）` : '指揮官の行動を選ぶ')
+    ? (P.playing ? '演出中…'
+      : pending ? `対象の${pending === 'analyze' ? '敵' : '味方'}をタップ（${(ORDERS.find((o) => o.id === pending) || {}).name}）`
+      : '指揮官の行動を選ぶ')
     : inMain
-      ? (P.playing ? '演出中…' : G.extraActive === actor.id ? `<b>${actor.name}</b> の追加行動` : `<b>${actor.name}</b> の行動（${G.actedCount + 1}/3）`)
+      ? (P.playing ? '演出中…'
+        : pendingAct ? `対象を選ぶ（${(pendingSkill || {}).name || ''}）`
+        : G.extraActive === actor.id ? `<b>${actor.name}</b> の追加行動`
+        : `<b>${actor.name}</b> の行動（${G.actedCount + 1}/3）`)
       : G.over ? '' : `${G.side === 'ally' ? '味方' : '敵'}の処理中…`;
+  const back = (pendingAct || pending)
+    ? `<button class="chipbtn" data-act="cancel-target" style="align-self:flex-end">戻る</button>`
+    : '';
 
   const commander = inCommander
     ? `<div class="commander">
@@ -864,6 +983,7 @@ function battleHtml() {
     <div class="party">${party}</div>
     ${queueBar}
     <div class="actorline">${actorline}</div>
+    ${back}
     ${commander}
     <div class="actions">${inMain ? actionButtons(actor) : ''}</div>
     ${inMain ? `<button class="chipbtn" data-act="auto" style="align-self:flex-end" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}
@@ -1023,18 +1143,23 @@ app.addEventListener('click', (e) => {
   if (!G) return;
   if (a === 'skip-commander') { skipCommander(); return; }
   if (a === 'reorder') { reorderMember(el.dataset.id); return; }
-  if (a === 'target') {
-    const f = G.foes.find((x) => x.id === el.dataset.id);
-    if (f && f.hp > 0) { G.targetId = f.id; render(); }
-    return;
-  }
   if (a === 'skill') { act(el.dataset.id); return; }
   if (a === 'order') { useOrder(el.dataset.id); return; }
-  if (a === 'order-target') {
-    const t = G.members.find((x) => x.id === el.dataset.id);
-    if (G.pendingOrder && t) applyOrder(G.pendingOrder, t);
+  if (a === 'pick-foe') {
+    const f = G.foes.find((x) => x.id === el.dataset.id);
+    if (!f || f.hp <= 0) return;
+    if (G.pendingAction) { G.targetId = f.id; resolveNow(G.pendingAction, f); }
+    else if (G.pendingOrder === 'analyze') { G.targetId = f.id; applyOrder('analyze', f); }
     return;
   }
+  if (a === 'pick-ally') {
+    const t = G.members.find((x) => x.id === el.dataset.id);
+    if (!t || t.hp <= 0) return;
+    if (G.pendingAction) resolveNow(G.pendingAction, t);
+    else if (G.pendingOrder) applyOrder(G.pendingOrder, t);
+    return;
+  }
+  if (a === 'cancel-target') { G.pendingAction = null; G.pendingOrder = null; render(); return; }
   if (a === 'auto') { autoStart(); return; }
 });
 
