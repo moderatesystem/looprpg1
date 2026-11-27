@@ -195,8 +195,12 @@ html, body {
 .detail .dhead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .detail h3 { margin:0; font-size:16px; }
 .detail .desc { font-size:12px; line-height:1.7; margin:8px 0; color:var(--text); }
-.detail .meta { display:flex; flex-wrap:wrap; gap:6px; font-size:10px; color:var(--dim); }
+.detail .meta { display:flex; flex-wrap:wrap; gap:6px; font-size:10px; color:var(--dim); margin-top:6px; }
 .detail .meta span { border:1px solid var(--line); background:#0e1730; border-radius:999px; padding:2px 7px; }
+.detail .list { display:flex; flex-direction:column; gap:8px; max-height:62vh; overflow-y:auto; margin-top:8px; }
+.detail .item { border:1px solid var(--line); border-radius:10px; padding:8px; background:#0e1730; }
+.detail .item h4 { margin:0; font-size:13px; }
+.detail .item p { margin:4px 0 0; font-size:11px; line-height:1.6; color:var(--dim); }
 .detail .btns { display:flex; gap:8px; margin-top:12px; }
 .detail .btns .btn { margin:0; flex:1; }
 
@@ -357,7 +361,7 @@ function createGame(key) {
     queue: MEMBERS.map((m) => m.id),
     actedCount: 0,
     members, foes, uses, targetId:foes[0].id,
-    taunt:0, pendingOrder:null, pendingAction:null, pendingDetail:null, cmdUsed:{ analyze:false, dodge:false, again:false },
+    taunt:0, pendingOrder:null, pendingAction:null, detailOpen:false, cmdUsed:{ analyze:false, dodge:false, again:false },
     extraFor:null, extraActive:null, auto:false, over:null, logOpen:false,
   };
 }
@@ -400,7 +404,7 @@ function startScenario(key) {
 
 function beginAllySetup() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null; G.pendingAction = null; G.pendingDetail = null;
+  G.side = 'ally'; G.phase = 'setup'; G.pendingOrder = null; G.pendingAction = null; G.detailOpen = false;
   const ev = [header('味方 セットアップ')];
   emit(ev, `敵の意図：${intentLine()}`);
   play(ev, beginCommander);
@@ -408,7 +412,7 @@ function beginAllySetup() {
 
 function beginCommander() {
   if (G.over) return endBattle();
-  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null; G.pendingAction = null; G.pendingDetail = null;
+  G.side = 'ally'; G.phase = 'commander'; G.pendingOrder = null; G.pendingAction = null; G.detailOpen = false;
   const ev = [header('味方 指揮官')];
   emit(ev, '命令を選ぶ（1回）');
   play(ev, () => {
@@ -423,13 +427,13 @@ function beginCommander() {
 function skipCommander() {
   if (!G || G.phase !== 'commander' || P.playing) return;
   G.pendingOrder = null;
-  G.pendingDetail = null;
+  G.detailOpen = false;
   beginAllyMain();
 }
 
 function beginAllyMain() {
   if (G.over) return endBattle();
-  G.phase = 'main'; G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null;
+  G.phase = 'main'; G.pendingAction = null; G.pendingOrder = null; G.detailOpen = false;
   G.queue = G.order.filter((id) => { const m = G.members.find((x) => x.id === id); return m && m.hp > 0; });
   G.actedCount = 0;
   G.extraActive = null;
@@ -456,15 +460,14 @@ function nextActor() {
   if (G.auto) setTimeout(autoStep, 300);
 }
 
-function act(id, auto = false, skipDetail = false) {
+function act(id, auto = false) {
   if (!G || G.over || G.side !== 'ally' || G.phase !== 'main' || P.playing) return;
   const m = currentMember();
   if (!m || m.hp <= 0) return;
   const skill = allSkills(m).find((s) => s.id === id);
   if (!skill) return;
   if (!auto) G.auto = false;
-  if (!auto && !skipDetail) { G.pendingDetail = { kind:'skill', id }; G.pendingOrder = null; render(); return; }
-  G.pendingDetail = null;
+  G.detailOpen = false;
   G.pendingOrder = null;
   const tgt = skillTarget(skill);
   if (!auto && tgt !== 'self') {
@@ -480,7 +483,7 @@ function resolveNow(id, target) {
   const m = currentMember();
   if (!m || m.hp <= 0) return;
   if (G.pendingAction) G.pendingAction = null;
-  G.pendingDetail = null;
+  G.detailOpen = false;
   if (target && G.foes.includes(target)) G.targetId = target.id;
   const ev = [];
   resolveAction(m, id, ev, target);
@@ -498,7 +501,7 @@ function resolveNow(id, target) {
 function beginAllyCleanup() {
   if (G.over) return endBattle();
   G.side = 'ally'; G.phase = 'cleanup';
-  G.extraFor = null; G.extraActive = null; G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null;
+  G.extraFor = null; G.extraActive = null; G.pendingAction = null; G.pendingOrder = null; G.detailOpen = false;
   const ev = [header('味方 クリーンアップ')];
   for (const m of G.members) if (m.hp > 0) tickStatuses(m, ev, false);
   for (const f of G.foes) {
@@ -783,26 +786,24 @@ function canUse(m, sid) {
   return true;
 }
 
-function useOrder(id, skipDetail = false) {
+function useOrder(id) {
   if (!G || G.side !== 'ally' || G.phase !== 'commander' || P.playing || G.over) return;
   if (id !== 'cheer' && G.cmdUsed[id]) return;
-  if (!skipDetail) { G.auto = false; G.pendingDetail = { kind:'order', id }; G.pendingOrder = null; render(); return; }
-  G.pendingDetail = null;
+  G.auto = false;
+  G.detailOpen = false;
   G.pendingOrder = G.pendingOrder === id ? null : id;
   G.pendingAction = null;
   render();
 }
 
-function confirmDetail() {
-  if (!G || !G.pendingDetail || P.playing) return;
-  const d = G.pendingDetail;
-  G.pendingDetail = null;
-  if (d.kind === 'skill') act(d.id, false, true);
-  else useOrder(d.id, true);
+function openDetail() {
+  if (!G || P.playing) return;
+  G.detailOpen = true;
+  render();
 }
 function closeDetail() {
   if (!G) return;
-  G.pendingDetail = null;
+  G.detailOpen = false;
   render();
 }
 
@@ -831,7 +832,7 @@ function applyOrder(id, target) {
     emit(ev, `指揮官：命令再起！ ${target.name}はもう一度動ける`, null, { kind:'good' });
   }
   G.pendingOrder = null;
-  G.pendingDetail = null;
+  G.detailOpen = false;
   play(ev, beginAllyMain);
 }
 
@@ -954,42 +955,40 @@ function orderBadge(id) {
   return '';
 }
 
-function detailHtml() {
-  if (!G || !G.pendingDetail || P.playing) return '';
-  const d = G.pendingDetail;
-  let icon = '';
-  let name = '';
-  let desc = '';
-  let meta = [];
-  let confirm = '使う';
-  if (d.kind === 'order') {
-    const o = ORDERS.find((x) => x.id === d.id);
-    if (!o) return '';
-    icon = '📜';
-    name = o.name;
-    desc = o.desc;
-    meta = [`対象: ${o.target}`, d.id === 'cheer' ? '毎ターン' : '1戦1回', 'テンション消費なし'];
-    confirm = '命令する';
+function detailListHtml() {
+  if (!G || !G.detailOpen || P.playing) return '';
+  const inCommander = G.side === 'ally' && G.phase === 'commander';
+  let title = '';
+  let rows = '';
+  if (inCommander) {
+    title = '命令の説明';
+    rows = ORDERS.map((o) => `<div class="item">
+      <h4>📜 ${esc(o.name)}</h4>
+      <p>${esc(o.desc)}</p>
+      <div class="meta"><span>対象: ${esc(o.target)}</span><span>${o.id === 'cheer' ? '毎ターン' : '1戦1回'}</span><span>テンション消費なし</span></div>
+    </div>`).join('');
   } else {
     const m = currentMember();
-    const s = m && allSkills(m).find((x) => x.id === d.id);
-    if (!s) return '';
-    icon = s.icon;
-    name = s.name;
-    desc = s.desc;
-    const tgt = skillTarget(s);
-    meta = [
-      `対象: ${tgt === 'foe' ? '敵1体' : tgt === 'ally' ? '味方1人' : '自分'}`,
-      s.uses ? `残り${G.uses[m.id][s.id] || 0}回` : '使用回数なし',
-    ];
-    if (s.tension) meta.push(`テンション${s.tension}消費`);
-    if (s.base) { meta.push(expectedText(m, s)); meta.push(critText(m, s)); }
+    if (!m) return '';
+    title = `${m.name} の行動`;
+    rows = allSkills(m).map((s) => {
+      const tgt = skillTarget(s);
+      const meta = [
+        `対象: ${tgt === 'foe' ? '敵1体' : tgt === 'ally' ? '味方1人' : '自分'}`,
+        s.uses ? `残り${G.uses[m.id][s.id] || 0}回` : '使用回数なし',
+      ];
+      if (s.tension) meta.push(`テンション${s.tension}消費`);
+      if (s.base) { meta.push(expectedText(m, s)); meta.push(critText(m, s)); }
+      return `<div class="item">
+        <h4>${s.icon} ${esc(s.name)}</h4>
+        <p>${esc(s.desc)}</p>
+        <div class="meta">${meta.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+      </div>`;
+    }).join('');
   }
   return `<div class="detail" data-act="detail-close"><div class="sheet" data-act="stay">
-    <div class="dhead"><h3>${icon} ${esc(name)}</h3><button class="chipbtn" data-act="detail-close">✕</button></div>
-    <div class="desc">${esc(desc)}</div>
-    <div class="meta">${meta.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
-    <div class="btns"><button class="btn primary" data-act="detail-confirm">${confirm}</button><button class="btn ghost" data-act="detail-close">戻る</button></div>
+    <div class="dhead"><h3>${esc(title)}</h3><button class="chipbtn" data-act="detail-close">✕</button></div>
+    <div class="list">${rows}</div>
   </div></div>`;
 }
 
@@ -1061,7 +1060,7 @@ function battleHtml() {
 
   const commander = inCommander
     ? `<div class="commander">
-        <div class="cmd-title">指揮官 <span>命令は1回</span></div>
+        <div class="cmd-title">指揮官 <span>命令は1回</span><button class="chipbtn" data-act="detail-open">詳細</button></div>
         <div class="orders">${orderButtons()}</div>
         <button class="btn ghost skipbtn" data-act="skip-commander" ${P.playing ? 'disabled' : ''}>待機して味方へ</button>
       </div>`
@@ -1078,7 +1077,7 @@ function battleHtml() {
     </div>
     <div class="foes">${foes}</div>
     <div class="party">${party}</div>
-    <div class="actorline">${actorline}<span class="spacer"></span>${inMain && !pendingAct ? `<button class="chipbtn" data-act="auto" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}</div>
+    <div class="actorline">${actorline}<span class="spacer"></span>${inMain && !pendingAct ? `<button class="chipbtn" data-act="detail-open">詳細</button><button class="chipbtn" data-act="auto" ${P.playing ? 'disabled' : ''}>おまかせ</button>` : ''}</div>
     <div class="logwrap">
       <div class="loghead"><span>ログ</span><button class="chipbtn" data-act="log-expand">拡大</button></div>
       <div class="log ${P.playing ? 'clickable' : ''}" ${P.playing ? 'data-act="skip"' : ''}>${log}</div>
@@ -1088,7 +1087,7 @@ function battleHtml() {
       ${(pendingAct || pending) ? `<div class="targetbar"><span>対象を選ぶ（${pendingAct ? ((pendingSkill || {}).name || '') : (pending === 'analyze' ? '精密解析' : (ORDERS.find((o) => o.id === pending) || {}).name)}）</span><button class="btn ghost" data-act="cancel-target">戻る</button></div>` : ''}
       <div class="actions">${inMain && !pendingAct ? actionButtons(actor) : ''}</div>
     </div>
-    ${detailHtml()}
+    ${detailListHtml()}
     ${G.logOpen ? logFullHtml() : ''}
     ${G.over && !P.playing ? overlayHtml() : ''}`;
 }
@@ -1249,7 +1248,7 @@ app.addEventListener('click', (e) => {
   if (a === 'log-expand') { if (G) { G.logOpen = true; render(); } return; }
   if (a === 'log-close') { if (G) { G.logOpen = false; render(); } return; }
   if (a === 'stay') return;
-  if (a === 'detail-confirm') { confirmDetail(); return; }
+  if (a === 'detail-open') { openDetail(); return; }
   if (a === 'detail-close') { closeDetail(); return; }
   if (P.playing) { skipPlay(); return; }
   sfx('click');
@@ -1275,7 +1274,7 @@ app.addEventListener('click', (e) => {
     else if (G.pendingOrder) applyOrder(G.pendingOrder, t);
     return;
   }
-  if (a === 'cancel-target') { G.pendingAction = null; G.pendingOrder = null; G.pendingDetail = null; render(); return; }
+  if (a === 'cancel-target') { G.pendingAction = null; G.pendingOrder = null; G.detailOpen = false; render(); return; }
   if (a === 'auto') { autoStart(); return; }
 });
 
